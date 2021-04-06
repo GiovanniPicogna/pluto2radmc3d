@@ -1971,11 +1971,15 @@ print('gas flaring index = ', flaringindex)
 print('gas alpha turbulent viscosity = ', alphaviscosity)
 
 # gas surface density field:
-gas  = Field(field='gasdens'+str(on)+'.dat', directory=dir)
+D = pp.pload(w_dir=dir)
+gas  = D.rho
+#gas  = Field(field='gasdens'+str(on)+'.dat', directory=dir)
 
 # 2D computational grid: R = grid cylindrical radius in code units, T = grid azimuth in radians
-R = gas.redge
-T = gas.pedge
+R = D.xr1
+T = D.xr3
+#R = gas.redge
+#T = gas.pedge
 # number of grid cells in the radial and azimuthal directions
 nrad = gas.nrad
 nsec = gas.nsec
