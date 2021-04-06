@@ -62,6 +62,11 @@ from pylab import *
 import matplotlib.colors as colors
 from makedustopac import *
 from matplotlib.mlab import *
+try:
+    import h5py as h5
+    hasH5 = True
+except ImportError:
+    hasH5 = False
 
 # -----------------------------
 # global constants in cgs units
@@ -115,11 +120,6 @@ class pload(object):
              datatype = "double"
          self.datatype = datatype
  
-         if ((not hasH5) and (datatype == 'hdf5')):
-             print 'To read AMR hdf5 files with python'
-             print 'Please install h5py (Python HDF5 Reader)'
-             return
- 
          self.level = level
  
          if w_dir is None:
@@ -136,19 +136,19 @@ class pload(object):
             timefile -- name of the out file which has timing information. 
          """
  
-         if (self.datatype == 'hdf5'):
-             fh5 = h5.File(timefile,'r') 
-             self.SimTime = fh5.attrs.get('time')
-             #self.Dt = 1.e-2 # Should be erased later given the level in AMR
-             fh5.close()
-         else:
-             ns = self.NStep
-             f_var = open(timefile, "r")
-             tlist = []
-             for line in f_var.readlines():
-                 tlist.append(line.split())
-             self.SimTime = float(tlist[ns][1])
-             self.Dt = float(tlist[ns][2])
+         #if (self.datatype == 'hdf5'):
+         fh5 = h5.File(timefile,'r') 
+         self.SimTime = fh5.attrs.get('time')
+         #self.Dt = 1.e-2 # Should be erased later given the level in AMR
+         fh5.close()
+         #else:
+         #    ns = self.NStep
+         #    f_var = open(timefile, "r")
+         #    tlist = []
+         #    for line in f_var.readlines():
+         #        tlist.append(line.split())
+         #    self.SimTime = float(tlist[ns][1])
+         #    self.Dt = float(tlist[ns][2])
  
      def ReadVarFile(self, varfile):
          """ Read variable names from the outfiles.
@@ -156,21 +156,31 @@ class pload(object):
            varfile -- name of the out file which has variable information. 
          """
 
-         if (self.datatype == 'hdf5'):
-             fh5 = h5.File(varfile,'r') 
-             self.filetype = 'single_file' 
-             self.endianess = '>' # not used with AMR, kept for consistency
-             self.vars = []
-             for iv in range(fh5.attrs.get('num_components')):
-                 self.vars.append(fh5.attrs.get('component_'+str(iv)))
-             fh5.close()
-         else:
-             vfp = open(varfile, "r")
-             varinfo = vfp.readline().split()
-             self.filetype = varinfo[4]
-             self.endianess = varinfo[5]
-             self.vars = varinfo[6:]
-             vfp.close()
+         #if (self.datatype == 'hdf5'):
+         #    fh5 = h5.File(varfile,'r') 
+         #    self.filetype = 'single_file' 
+         #    self.endianess = '>' # not used with AMR, kept for consistency
+         #    self.vars = []
+         #    for iv in range(fh5.attrs.get('num_components')):
+         #        self.vars.append(fh5.attrs.get('component_'+str(iv)))
+         #    fh5.close()
+         #elif (self.datatype == 'dbl.h5'):
+         print(varfile)
+         fh5 = h5.File(varfile,'r') 
+         self.filetype = 'single_file' 
+         self.endianess = '>' # not used with AMR, kept for consistency
+         self.vars = []
+         print(np.size(fh5['Timestep_0/vars'].keys()))
+         for iv in range(np.size(fh5['Timestep_0/vars'].keys())):
+             self.vars.append(fh5['Timestep_0/vars'].keys()[iv])
+         fh5.close()
+         #else:
+         #    vfp = open(varfile, "r")
+         #    varinfo = vfp.readline().split()
+         #    self.filetype = varinfo[4]
+         #    self.endianess = varinfo[5]
+         #    self.vars = varinfo[6:]
+         #    vfp.close()
 
      def ReadGridFile(self, gridfile):
          """ Read grid values from the grid.out file.
@@ -307,116 +317,55 @@ class pload(object):
          vtkvardict = dict(zip(ks,vtkvar))
          return vtkvardict
 
-     def DataScanHDF5(self, fp, myvars, ilev):
-         """ Scans the Chombo HDF5 data files for AMR in PLUTO. 
+     def getGrid(self, fp):
+         x = fp['node_coords']['X'][:]
+         x = x.astype('float64')
+         return x
+
+     def getGridCell(self, fp):
+         x = fp['cell_coords']['X'][:]
+         x = x.astype('float64')
+         return x
+
+     def getVar(self, fp, step, var):
+         returnData=(fp["Timestep_"+str(step)+"/vars"][var][:])
+         return returnData
+
+     def DataScanHDF5(self, fp, myvars):
+         """ Scans HDF5 data files in PLUTO. 
          
          **Inputs**:
          
            fp     -- Data file pointer\n
            myvars -- Names of the variables to read\n
-           ilev   -- required AMR level
          
          **Output**:
          
            Dictionary consisting of variable names as keys and its values. 
- 
-         **Note**:
- 
-           Due to the particularity of AMR, the grid arrays loaded in ReadGridFile are overwritten here.
          
          """
 
          # Read the grid information
-         dim = fp['Chombo_global'].attrs.get('SpaceDim')
-         nlev = fp.attrs.get('num_levels')
-         il = min(nlev-1,ilev)
-         lev  = []
-         for i in range(nlev):
-             lev.append('level_'+str(i))     
-         freb = np.zeros(nlev,dtype='int')
-         for i in range(il+1)[::-1]:
-             fl = fp[lev[i]]
-             if (i == il):
-                 pdom = fl.attrs.get('prob_domain')
-                 dx = fl.attrs.get('dx')
-                 dt = fl.attrs.get('dt')
-                 ystr = 1. ; zstr = 1. ; logr = 0
-                 try:
-                     geom = fl.attrs.get('geometry')
-                     logr = fl.attrs.get('logr')
-                     if (dim == 2):
-                         ystr = fl.attrs.get('g_x2stretch')
-                     elif (dim == 3):
-                         zstr = fl.attrs.get('g_x3stretch')
-                 except:
-                     print 'Old HDF5 file, not reading stretch and logr factors'
-                 freb[i] = 1
-                 x1b = fl.attrs.get('domBeg1')
-                 if (dim == 1):
-                     x2b = 0
-                 else:
-                     x2b = fl.attrs.get('domBeg2')
-                 if (dim == 1 or dim == 2):
-                     x3b = 0
-                 else:
-                     x3b = fl.attrs.get('domBeg3')
-                 jbeg = 0 ; jend = 0 ; ny = 1
-                 kbeg = 0 ; kend = 0 ; nz = 1
-                 if (dim == 1):
-                     ibeg = pdom[0] ; iend = pdom[1] ; nx = iend-ibeg+1
-                 elif (dim == 2):
-                     ibeg = pdom[0] ; iend = pdom[2] ; nx = iend-ibeg+1
-                     jbeg = pdom[1] ; jend = pdom[3] ; ny = jend-jbeg+1
-                 elif (dim == 3):
-                     ibeg = pdom[0] ; iend = pdom[3] ; nx = iend-ibeg+1
-                     jbeg = pdom[1] ; jend = pdom[4] ; ny = jend-jbeg+1
-                     kbeg = pdom[2] ; kend = pdom[5] ; nz = kend-kbeg+1
-             else:
-                 rat = fl.attrs.get('ref_ratio')
-                 freb[i] = rat*freb[i+1]
-         
-         dx0 = dx*freb[0]
+         dim = np.size(fp['cell_coords'].keys())
  
-         ## Allow to load only a portion of the domain
-         if (self.x1range != None):
-             if logr == 0:
-                 self.x1range = self.x1range-x1b
-             else:
-                 self.x1range = [log(self.x1range[0]/x1b),log(self.x1range[1]/x1b)]
-             ibeg0 = min(self.x1range)/dx0 ; iend0 = max(self.x1range)/dx0
-             ibeg  = max([ibeg, int(ibeg0*freb[0])]) ; iend = min([iend,int(iend0*freb[0]-1)])
-             nx = iend-ibeg+1
-         if (self.x2range != None):
-             self.x2range = (self.x2range-x2b)/ystr
-             jbeg0 = min(self.x2range)/dx0 ; jend0 = max(self.x2range)/dx0
-             jbeg  = max([jbeg, int(jbeg0*freb[0])]) ; jend = min([jend,int(jend0*freb[0]-1)])
-             ny = jend-jbeg+1
-         if (self.x3range != None):
-             self.x3range = (self.x3range-x3b)/zstr
-             kbeg0 = min(self.x3range)/dx0 ; kend0 = max(self.x3range)/dx0
-             kbeg  = max([kbeg, int(kbeg0*freb[0])]) ; kend = min([kend,int(kend0*freb[0]-1)])
-             nz = kend-kbeg+1
-         
-         ## Create uniform grids at the required level
-         if logr == 0:
-             x1 = x1b + (ibeg+np.array(range(nx))+0.5)*dx
-         else:
-             x1 = x1b*(exp((ibeg+np.array(range(nx))+1)*dx)+exp((ibeg+np.array(range(nx)))*dx))*0.5
-         
-         x2 = x2b + (jbeg+np.array(range(ny))+0.5)*dx*ystr
-         x3 = x3b + (kbeg+np.array(range(nz))+0.5)*dx*zstr
-         if logr == 0:
-             dx1 = np.ones(nx)*dx
-         else:
-             dx1 = x1b*(exp((ibeg+np.array(range(nx))+1)*dx)-exp((ibeg+np.array(range(nx)))*dx))
-         dx2 = np.ones(ny)*dx*ystr
-         dx3 = np.ones(nz)*dx*zstr
- 
-         # Create the xr arrays containing the edges positions
-         # Useful for pcolormesh which should use those
-         x1r = np.zeros(len(x1)+1) ; x1r[1:] = x1 + dx1/2.0 ; x1r[0] = x1r[1]-dx1[0]
-         x2r = np.zeros(len(x2)+1) ; x2r[1:] = x2 + dx2/2.0 ; x2r[0] = x2r[1]-dx2[0]
-         x3r = np.zeros(len(x3)+1) ; x3r[1:] = x3 + dx3/2.0 ; x3r[0] = x3r[1]-dx3[0]
+         x1r = self.getGrid(fp)[0]
+         x1  = self.getGridCell(fp)[0]
+         nx = x1r.shape[0]
+         dx1 = x1r[1:]-x1r[:-1]
+         ny = 0
+         nz = 0
+         dt = 0
+         if(dim>1):
+             x2r = self.getGrid(fp)[1]
+             x2  = self.getGridCell(fp)[1]
+             ny = x2r.shape[0]
+             dx2 = x2r[1:]-x2r[:-1]
+         if(dim>2):
+             x3r = self.getGrid(fp)[2]
+             x3 = self.getGridCell(fp)[2]
+             nz = x3r.shape[0]
+             dx3 = x3r[1:]-x3r[:-1]
+
          NewGridDict = dict([('n1',nx),('n2',ny),('n3',nz),\
                              ('x1',x1),('x2',x2),('x3',x3),\
                              ('x1r',x1r),('x2r',x2r),('x3r',x3r),\
@@ -427,99 +376,12 @@ class pload(object):
          nvar = len(myvars)
          vars = np.zeros((nx,ny,nz,nvar))
          
-         LevelDic = {'nbox':0,'ibeg':ibeg,'iend':iend,'jbeg':jbeg,'jend':jend,'kbeg':kbeg,'kend':kend}
-         AMRLevel = [] 
-         AMRBoxes = np.zeros((nx,ny,nz))
-         for i in range(il+1):
-             AMRLevel.append(LevelDic.copy())
-             fl = fp[lev[i]]
-             data = fl['data:datatype=0']
-             boxes = fl['boxes']
-             nbox = len(boxes['lo_i'])
-             AMRLevel[i]['nbox'] = nbox
-             ncount = 0L
-             AMRLevel[i]['box']=[]
-             for j in range(nbox): # loop on all boxes of a given level
-                 AMRLevel[i]['box'].append({'x0':0.,'x1':0.,'ib':0L,'ie':0L,\
-                                            'y0':0.,'y1':0.,'jb':0L,'je':0L,\
-                                            'z0':0.,'z1':0.,'kb':0L,'ke':0L})
-                 # Box indexes
-                 ib = boxes[j]['lo_i'] ; ie = boxes[j]['hi_i'] ; nbx = ie-ib+1
-                 jb = 0 ; je = 0 ; nby = 1
-                 kb = 0 ; ke = 0 ; nbz = 1
-                 if (dim > 1):
-                     jb = boxes[j]['lo_j'] ; je = boxes[j]['hi_j'] ; nby = je-jb+1
-                 if (dim > 2):
-                     kb = boxes[j]['lo_k'] ; ke = boxes[j]['hi_k'] ; nbz = ke-kb+1
-                 szb = nbx*nby*nbz*nvar
-                 # Rescale to current level
-                 kb = kb*freb[i] ; ke = (ke+1)*freb[i] - 1
-                 jb = jb*freb[i] ; je = (je+1)*freb[i] - 1
-                 ib = ib*freb[i] ; ie = (ie+1)*freb[i] - 1
-                 
-                 # Skip boxes lying outside ranges
-                 if ((ib > iend) or (ie < ibeg) or \
-                     (jb > jend) or (je < jbeg) or \
-                     (kb > kend) or (ke < kbeg)):
-                     ncount = ncount + szb
-                 else:
- 
-                     ### Read data
-                     q = data[ncount:ncount+szb].reshape((nvar,nbz,nby,nbx)).T
-                     
-                     ### Find boxes intersections with current domain ranges
-                     ib0 = max([ibeg,ib]) ; ie0 = min([iend,ie])
-                     jb0 = max([jbeg,jb]) ; je0 = min([jend,je])
-                     kb0 = max([kbeg,kb]) ; ke0 = min([kend,ke])
-                 
-                     ### Store box corners in the AMRLevel structure
-                     if logr == 0:
-                         AMRLevel[i]['box'][j]['x0'] = x1b + dx*(ib0)
-                         AMRLevel[i]['box'][j]['x1'] = x1b + dx*(ie0+1)
-                     else:
-                         AMRLevel[i]['box'][j]['x0'] = x1b*exp(dx*(ib0))
-                         AMRLevel[i]['box'][j]['x1'] = x1b*exp(dx*(ie0+1))
-                     AMRLevel[i]['box'][j]['y0'] = x2b + dx*(jb0)*ystr
-                     AMRLevel[i]['box'][j]['y1'] = x2b + dx*(je0+1)*ystr
-                     AMRLevel[i]['box'][j]['z0'] = x3b + dx*(kb0)*zstr
-                     AMRLevel[i]['box'][j]['z1'] = x3b + dx*(ke0+1)*zstr
-                     AMRLevel[i]['box'][j]['ib'] = ib0 ; AMRLevel[i]['box'][j]['ie'] = ie0 
-                     AMRLevel[i]['box'][j]['jb'] = jb0 ; AMRLevel[i]['box'][j]['je'] = je0 
-                     AMRLevel[i]['box'][j]['kb'] = kb0 ; AMRLevel[i]['box'][j]['ke'] = ke0 
-                     AMRBoxes[ib0-ibeg:ie0-ibeg+1, jb0-jbeg:je0-jbeg+1, kb0-kbeg:ke0-kbeg+1] = il
-                     
-                     ### Extract the box intersection from data stored in q
-                     cib0 = (ib0-ib)/freb[i] ; cie0 = (ie0-ib)/freb[i]
-                     cjb0 = (jb0-jb)/freb[i] ; cje0 = (je0-jb)/freb[i]
-                     ckb0 = (kb0-kb)/freb[i] ; cke0 = (ke0-kb)/freb[i]
-                     q1 = np.zeros((cie0-cib0+1, cje0-cjb0+1, cke0-ckb0+1,nvar))
-                     q1 = q[cib0:cie0+1,cjb0:cje0+1,ckb0:cke0+1,:]
-                     
-                     # Remap the extracted portion
-                     if (dim == 1):
-                         new_shape = (ie0-ib0+1,1)
-                     elif (dim == 2):
-                         new_shape = (ie0-ib0+1,je0-jb0+1)
-                     else:
-                         new_shape = (ie0-ib0+1,je0-jb0+1,ke0-kb0+1)
-                         
-                     stmp = list(new_shape)
-                     while stmp.count(1) > 0:
-                         stmp.remove(1)
-                     new_shape = tuple(stmp)
-                     
-                     myT = Tools()
-                     for iv in range(nvar):
-                         vars[ib0-ibeg:ie0-ibeg+1,jb0-jbeg:je0-jbeg+1,kb0-kbeg:ke0-kbeg+1,iv] = \
-                             myT.congrid(q1[:,:,:,iv].squeeze(),new_shape,method='linear',minusone=True).reshape((ie0-ib0+1,je0-jb0+1,ke0- kb0+1))
-                     ncount = ncount+szb
-         
          h5vardict={}
          for iv in range(nvar):
-             h5vardict[myvars[iv]] = vars[:,:,:,iv].squeeze()
-         AMRdict = dict([('AMRBoxes',AMRBoxes),('AMRLevel',AMRLevel)])
+             h5vardict[myvars[iv]] = self.getVar(fp,0,myvars[iv])
+             #h5vardict[myvars[iv]] = vars[:,:,:,iv].squeeze()
+
          OutDict = dict(NewGridDict)
-         OutDict.update(AMRdict)
          OutDict.update(h5vardict)
          return OutDict
 
@@ -586,33 +448,36 @@ class pload(object):
  
            Updated Dictionary consisting of variable names as keys and its values.
          """
-         if self.datatype == 'hdf5':
-             fp = h5.File(datafilename,'r')
-         else:
-             fp = open(datafilename, "rb")
+         #if self.datatype == 'hdf5':
+         fp = h5.File(datafilename,'r')
+         #else:
+         #    fp = open(datafilename, "rb")
          
          print "Reading Data file : %s"%datafilename
          
-         if self.datatype == 'vtk':
-             vtkd = self.DataScanVTK(fp, n1, n2, n3, endian, dtype)
-             ddict.update(vtkd)
-         elif self.datatype == 'hdf5':
-             h5d = self.DataScanHDF5(fp,myvars,self.level)
-             ddict.update(h5d)      
-         else:
-             for i in range(len(myvars)):
-                 if myvars[i] == 'bx1s':
-                     ddict.update({myvars[i]: self.DataScan(fp, n1, n2, n3, endian,
-                                                            dtype, off=n2*n3)})
-                 elif myvars[i] == 'bx2s':
-                     ddict.update({myvars[i]: self.DataScan(fp, n1, n2, n3, endian,
-                                                            dtype, off=n3*n1)})
-                 elif myvars[i] == 'bx3s':
-                     ddict.update({myvars[i]: self.DataScan(fp, n1, n2, n3, endian,
-                                                            dtype, off=n1*n2)})
-                 else:
-                     ddict.update({myvars[i]: self.DataScan(fp, n1, n2, n3, endian,
-                                                            dtype)})
+ #        if self.datatype == 'vtk':
+ #            vtkd = self.DataScanVTK(fp, n1, n2, n3, endian, dtype)
+ #            ddict.update(vtkd)
+ #        elif self.datatype == 'hdf5':
+ #            h5d = self.DataScanHDF5(fp,myvars,self.level)
+ #            ddict.update(h5d)   
+ #        elif self.datatype == 'dbl.h5':
+         h5d = self.DataScanHDF5(fp,myvars)
+         ddict.update(h5d)  
+ #        else:
+ #            for i in range(len(myvars)):
+ #                if myvars[i] == 'bx1s':
+ #                    ddict.update({myvars[i]: self.DataScan(fp, n1, n2, n3, endian,
+ #                                                           dtype, off=n2*n3)})
+ #                elif myvars[i] == 'bx2s':
+ #                    ddict.update({myvars[i]: self.DataScan(fp, n1, n2, n3, endian,
+ #                                                           dtype, off=n3*n1)})
+ #                elif myvars[i] == 'bx3s':
+ #                    ddict.update({myvars[i]: self.DataScan(fp, n1, n2, n3, endian,
+ #                                                           dtype, off=n1*n2)})
+ #                else:
+ #                    ddict.update({myvars[i]: self.DataScan(fp, n1, n2, n3, endian,
+ #                                                           dtype)})
          
          fp.close()
     
@@ -662,23 +527,28 @@ class pload(object):
  
          """
          gridfile = self.wdir+"grid.out"
-         if self.datatype == "float":
-             dtype = "f"
-             varfile = self.wdir+"flt.out"
-             dataext = ".flt"
-         elif self.datatype == "vtk":
-             dtype = "f"
-             varfile = self.wdir+"vtk.out"
-             dataext=".vtk"
-         elif self.datatype == 'hdf5':
-             dtype = 'd'
-             dataext = '.hdf5'
-             nstr = num
-             varfile = self.wdir+"data."+nstr+dataext
-         else:
-             dtype = "d"
-             varfile = self.wdir+"dbl.out"
-             dataext = ".dbl"
+         #if self.datatype == "float":
+         #    dtype = "f"
+         #    varfile = self.wdir+"flt.out"
+         #    dataext = ".flt"
+         #elif self.datatype == "vtk":
+         #    dtype = "f"
+         #    varfile = self.wdir+"vtk.out"
+         #    dataext=".vtk"
+         #elif self.datatype == 'hdf5':
+         #    dtype = 'd'
+         #    dataext = '.hdf5'
+         #    nstr = num
+         #    varfile = self.wdir+"data."+nstr+dataext
+         #elif self.datatype == 'h5':
+         dtype = 'd'
+         dataext = '.dbl.h5'
+         nstr = num
+         varfile = self.wdir+"data."+nstr+dataext
+         #else:
+         #    dtype = "d"
+         #    varfile = self.wdir+"dbl.out"
+         #    dataext = ".dbl"
          
          self.ReadVarFile(varfile)
          self.ReadGridFile(gridfile)
@@ -1921,23 +1791,25 @@ else:
 
 # set spherical grid, array allocation.
 # get the aspect ratio and flaring index used in the numerical simulation
-command = 'gawk " BEGIN{IGNORECASE=1} /^AspectRatio/ " '+dir+'/*.par'
+#command = 'gawk " BEGIN{IGNORECASE=1} /^AspectRatio/ " '+dir+'/*.par'
 # check which version of python we're using
-if sys.version_info[0] < 3:   # python 2.X
-    buf = subprocess.check_output(command, shell=True)
-else:                         # python 3.X
-    buf = subprocess.getoutput(command)
-aspectratio = float(buf.split()[1])
+#if sys.version_info[0] < 3:   # python 2.X
+#    buf = subprocess.check_output(command, shell=True)
+#else:                         # python 3.X
+#    buf = subprocess.getoutput(command)
+#aspectratio = float(buf.split()[1])
+aspectratio = 0.1
 # get the flaring index used in the numerical simulation
-command = 'gawk " BEGIN{IGNORECASE=1} /^FlaringIndex/ " '+dir+'/*.par'
-if sys.version_info[0] < 3:
-    buf = subprocess.check_output(command, shell=True)
-else:
-    buf = subprocess.getoutput(command)
-flaringindex = float(buf.split()[1])
+#command = 'gawk " BEGIN{IGNORECASE=1} /^FlaringIndex/ " '+dir+'/*.par'
+#if sys.version_info[0] < 3:
+#    buf = subprocess.check_output(command, shell=True)
+#else:
+#    buf = subprocess.getoutput(command)
+#flaringindex = float(buf.split()[1])
+flaringindex = 0.
 # get the alpha viscosity used in the numerical simulation
 try:
-    command = 'awk " /^AlphaViscosity/ " '+dir+'/*.par'
+    command = 'awk " /^ALPHA/ " '+dir+'/*.ini'
     if sys.version_info[0] < 3:
         buf = subprocess.check_output(command, shell=True)
     else:
@@ -1957,32 +1829,33 @@ except IndexError:
 
 
 # get the grid's radial spacing
-if fargo3d == 'No':
-    command = 'awk " /^RadialSpacing/ " '+dir+'/*.par'
-    if sys.version_info[0] < 3:
-        buf = subprocess.check_output(command, shell=True)
-    else:
-        buf = subprocess.getoutput(command)
-    radialspacing = str(buf.split()[1])
-    print('gas radial spacing = ', radialspacing)
+#if fargo3d == 'No':
+#    command = 'awk " /^RadialSpacing/ " '+dir+'/*.par'
+#    if sys.version_info[0] < 3:
+#        buf = subprocess.check_output(command, shell=True)
+#    else:
+#        buf = subprocess.getoutput(command)
+#    radialspacing = str(buf.split()[1])
+#    print('gas radial spacing = ', radialspacing)
 
 print('gas aspect ratio = ', aspectratio)
 print('gas flaring index = ', flaringindex)
 print('gas alpha turbulent viscosity = ', alphaviscosity)
 
 # gas surface density field:
-D = pp.pload(w_dir=dir)
+D = pload(ns=0,w_dir=dir)
 gas  = D.rho
 #gas  = Field(field='gasdens'+str(on)+'.dat', directory=dir)
 
 # 2D computational grid: R = grid cylindrical radius in code units, T = grid azimuth in radians
-R = D.xr1
-T = D.xr3
+R = D.x1
+T = D.x3
 #R = gas.redge
 #T = gas.pedge
 # number of grid cells in the radial and azimuthal directions
-nrad = gas.nrad
-nsec = gas.nsec
+nrad = np.size(gas)
+nsec = np.size(gas)
+print(nrad,nsec)
 # extra useful quantities (code units)
 Rinf = gas.redge[0:len(gas.redge)-1]
 Rsup = gas.redge[1:len(gas.redge)]
