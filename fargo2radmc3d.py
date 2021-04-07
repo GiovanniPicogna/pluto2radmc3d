@@ -62,6 +62,7 @@ from pylab import *
 import matplotlib.colors as colors
 from makedustopac import *
 from matplotlib.mlab import *
+import struct
 try:
     import h5py as h5
     hasH5 = True
@@ -170,9 +171,9 @@ class pload(object):
          self.filetype = 'single_file' 
          self.endianess = '>' # not used with AMR, kept for consistency
          self.vars = []
-         print(np.size(fh5['Timestep_0/vars'].keys()))
-         for iv in range(np.size(fh5['Timestep_0/vars'].keys())):
-             self.vars.append(fh5['Timestep_0/vars'].keys()[iv])
+         print(np.size(fh5['Timestep_300/vars'].keys()))
+         for iv in range(np.size(fh5['Timestep_300/vars'].keys())):
+             self.vars.append(fh5['Timestep_300/vars'].keys()[iv])
          fh5.close()
          #else:
          #    vfp = open(varfile, "r")
@@ -265,65 +266,13 @@ class pload(object):
          else:
              self.nshp = (self.n3, self.n2, self.n1)
 
-     def DataScanVTK(self, fp, n1, n2, n3, endian, dtype):
-         """ Scans the VTK data files. 
-     
-         **Inputs**:
-     
-         fp -- Data file pointer\n
-         n1 -- No. of points in X1 direction\n
-         n2 -- No. of points in X2 direction\n
-         n3 -- No. of points in X3 direction\n
-         endian -- Endianess of the data\n
-         dtype -- datatype 
-      
-         **Output**:
-           
-         Dictionary consisting of variable names as keys and its values. 
- 
-         """
-         ks = []
-         vtkvar = []
-         while True:
-             l = fp.readline()
-             try:
-                 l.split()[0]
-             except IndexError:
-                 pass
-             else:
-                 if l.split()[0] == 'SCALARS':
-                     ks.append(l.split()[1])
-                 elif l.split()[0] == 'LOOKUP_TABLE':
-                     A = array.array(dtype)
-                     fmt = endian+str(n1*n2*n3)+dtype
-                     nb = np.dtype(fmt).itemsize 
-                     A.fromstring(fp.read(nb))
-                     if (self.Slice):
-                         darr = np.zeros((n1*n2*n3))
-                         indxx = np.sort([n3_tot*n2_tot*k + j*n2_tot + i for i in self.irange for j in self.jrange for k in self.krange])
-                         if (sys.byteorder != self.endianess):
-                             A.byteswap()
-                         for ii,iii in enumerate(indxx):
-                             darr[ii] = A[iii]
-                         vtkvar_buf = [darr]
-                     else:
-                         vtkvar_buf = np.frombuffer(A,dtype=np.dtype(fmt))
-                     vtkvar.append(np.reshape(vtkvar_buf,self.nshp).transpose())
-                 else:
-                     pass
-             if l == '':
-                 break
-         
-         vtkvardict = dict(zip(ks,vtkvar))
-         return vtkvardict
-
-     def getGrid(self, fp):
-         x = fp['node_coords']['X'][:]
+     def getGrid(self, fp, dim):
+         x = fp['node_coords'][dim][:]
          x = x.astype('float64')
          return x
 
-     def getGridCell(self, fp):
-         x = fp['cell_coords']['X'][:]
+     def getGridCell(self, fp, dim):
+         x = fp['cell_coords'][dim][:]
          x = x.astype('float64')
          return x
 
@@ -347,23 +296,23 @@ class pload(object):
 
          # Read the grid information
          dim = np.size(fp['cell_coords'].keys())
- 
-         x1r = self.getGrid(fp)[0]
-         x1  = self.getGridCell(fp)[0]
-         nx = x1r.shape[0]
+
+         x1r = self.getGrid(fp, 'X')
+         x1  = self.getGridCell(fp, 'X')
+         nx = x1.shape[2]
          dx1 = x1r[1:]-x1r[:-1]
          ny = 0
          nz = 0
          dt = 0
          if(dim>1):
-             x2r = self.getGrid(fp)[1]
-             x2  = self.getGridCell(fp)[1]
-             ny = x2r.shape[0]
+             x2r = self.getGrid(fp, 'Y')
+             x2  = self.getGridCell(fp, 'Y')
+             ny = x2.shape[1]
              dx2 = x2r[1:]-x2r[:-1]
          if(dim>2):
-             x3r = self.getGrid(fp)[2]
-             x3 = self.getGridCell(fp)[2]
-             nz = x3r.shape[0]
+             x3r = self.getGrid(fp, 'Z')
+             x3 = self.getGridCell(fp, 'Z')
+             nz = x3.shape[0]
              dx3 = x3r[1:]-x3r[:-1]
 
          NewGridDict = dict([('n1',nx),('n2',ny),('n3',nz),\
@@ -377,8 +326,9 @@ class pload(object):
          vars = np.zeros((nx,ny,nz,nvar))
          
          h5vardict={}
+         print(myvars)
          for iv in range(nvar):
-             h5vardict[myvars[iv]] = self.getVar(fp,0,myvars[iv])
+             h5vardict[myvars[iv]] = self.getVar(fp,300,myvars[iv])
              #h5vardict[myvars[iv]] = vars[:,:,:,iv].squeeze()
 
          OutDict = dict(NewGridDict)
@@ -610,13 +560,15 @@ class Mesh():
         # -----
         # CB: we build the array of spherical radii used by RADMC3D from the set of spherical radii
         # adopted in the PLUTO simulation
+
         try:
-            domain_rad = np.loadtxt(directory+"used_rad.dat")  # radial interfaces of grid cells
+            domain_rad = np.loadtxt(fname=directory+"grid.out",skiprows=11,usecols=1,max_rows=self.nrad)  # radial interfaces of grid cells
+            domain_rad = np.append(domain_rad,100.)
         except IOError:
             print('IOError')
+
         self.redge = domain_rad                              # r-edge
         self.rmed = 2.0*(domain_rad[1:]*domain_rad[1:]*domain_rad[1:] - domain_rad[:-1]*domain_rad[:-1]*domain_rad[:-1]) / (domain_rad[1:]*domain_rad[1:] - domain_rad[:-1]*domain_rad[:-1]) / 3.0  # r-center
-
 
         # -----
         # colatitude
@@ -628,24 +580,14 @@ class Mesh():
         #
         # thmin is set as pi/2+atan(zmax_over_H*h) with h the gas aspect ratio
         # zmax_over_H = z_max_grid / pressure scale height, value set in params.dat
-        thmin = np.pi/2. - math.atan(zmax_over_H*aspectratio)
-        thmax = np.pi/2.
-        if polarized_scat == 'No':
-            # first define array of colatitudes above midplane
-            ymp = np.linspace(np.log10(thmin),np.log10(thmax),self.ncol//2+1)
-            # refine towards the midplane
-            ym_lower = -1.0*10**(ymp)+thmin+thmax
-        else:
-            # first define array of colatitudes above midplane
-            ymp = np.linspace(thmin,thmax,self.ncol//2+1)
-            # no refinement towards the midplane
-            ym_lower = -ymp+thmin+thmax
-        # then define array of colatitudes below midplane
-        ym_upper = np.pi-ym_lower[1:self.ncol//2+1]
-        # and finally concatenate
-        ym = np.concatenate([ym_lower[::-1],ym_upper])
-        self.tedge = ym                    # colatitude of cell faces
-        self.tmed = 0.5*(ym[:-1] + ym[1:]) # colatitude of cell centers
+
+        try:
+            domain_th = np.loadtxt(fname=directory+"grid.out",skiprows=10+1+self.nrad+1,usecols=1,max_rows=self.ncol)  # radial interfaces of grid cells
+        except IOError:
+            print('IOError')
+
+        self.tedge = domain_th                    # colatitude of cell faces
+        self.tmed = 0.5*(domain_th[:-1] + domain_th[1:]) # colatitude of cell centers
 
         # define number of cells in vertical direction for arrays in
         # cylindrical coordinates
@@ -683,9 +625,12 @@ class Field(Mesh):
             if directory[-1] != '/':
                 directory += '/'
 
-        # get nrad and nsec (number of cells in radial and azimuthal directions)
-        buf, buf, buf, buf, buf, buf, nrad, nsec = np.loadtxt(directory+"dims.dat",
-                                                      unpack=True)
+        D = pload(ns=300,w_dir=directory)
+
+        nrad = np.shape(D.rho)[2]
+        ncol = np.shape(D.rho)[1]
+        nsec = np.shape(D.rho)[0]
+
         nrad = int(nrad)
         nsec = int(nsec)
         self.nrad = nrad
@@ -694,31 +639,27 @@ class Field(Mesh):
 
         Mesh.__init__(self, directory)    # all Mesh attributes inside Field
 
-        if fargo3d == 'No':
-            # units.dat contains units of mass [kg], length [m], time [s], and temperature [k]
-            cumass, culength, cutime, cutemp = np.loadtxt(directory+"units.dat",unpack=True)
-            self.cumass = cumass
-            self.culength = culength
-            self.cutime = cutime
-            self.cutemp = cutemp
-        else:
-            # get units via variable.par file
-            command = 'awk " /^UNITOFLENGTHAU/ " '+directory+'variables.par'
-            # check which version of python we're using
-            if sys.version_info[0] < 3:   # python 2.X
-                buf = subprocess.check_output(command, shell=True)
-            else:                         # python 3.X
-                buf = subprocess.getoutput(command)
-            self.culength = float(buf.split()[1])*1.5e11  #from au to meters
-            command = 'awk " /^UNITOFMASSMSUN/ " '+directory+'variables.par'
-            # check which version of python we're using
-            if sys.version_info[0] < 3:   # python 2.X
-                buf = subprocess.check_output(command, shell=True)
-            else:                         # python 3.X
-                buf = subprocess.getoutput(command)
-            self.cumass = float(buf.split()[1])*2e30  #from Msol to kg
-            # unit of temperature = mean molecular weight * 8.0841643e-15 * M / L;
-            self.cutemp = 2.35 * 8.0841643e-15 * self.cumass / self.culength
+        # get units via definitions.h file
+        command = 'awk " /^#define  UNIT_LENGTH/ " '+directory+'definitions.h'
+        # check which version of python we're using
+        if sys.version_info[0] < 3:   # python 2.X
+            buf = subprocess.check_output(command, shell=True)
+        else:                         # python 3.X
+            buf = subprocess.getoutput(command)
+        num = buf.split()[2]
+        ulen = num.split('*')[0][1:]
+        self.culength = float(ulen)*1.5e11  #from au to meters
+        command = 'awk " /^#define  UNIT_DENSITY/ " '+directory+'definitions.h'
+        # check which version of python we're using
+        if sys.version_info[0] < 3:   # python 2.X
+            buf = subprocess.check_output(command, shell=True)
+        else:                         # python 3.X
+            buf = subprocess.getoutput(command)
+        num = buf.split()[2]
+        ulen = num.split('*')[0][1:]
+        self.cumass = float(ulen)*2e30  #from Msol to kg
+        # unit of temperature = mean molecular weight * 8.0841643e-15 * M / L;
+        self.cutemp = 2.35 * 8.0841643e-15 * self.cumass / self.culength
 
         if override_units == 'Yes':
             self.cumass = new_unit_mass
@@ -740,15 +681,92 @@ class Field(Mesh):
         else:
             self.r = self.rmed
 
-        self.data = self.__open_field(directory+field,dtype) # scalar data is here.
+        self.data = D.rho # scalar data is here.
 
-    def __open_field(self, f, dtype):
+    def __open_field(self, f, var, dtype):
         """
         Reading the data
         """
-        field = np.fromfile(f, dtype=dtype)
+        datafilename = f+'data.0300.dbl.h5'
+        fp = h5.File(datafilename,'r')
+        field = self.getVar(fp, 300, var)
         return field.reshape(self.nrad,self.nsec) # 2D
 
+# -------------------------------------------------------------------
+# reading particles
+# -------------------------------------------------------------------
+class Particles():
+    # G. Picogna
+    """
+    Particle class, it stores all the parameters and scalar data
+    for particles
+    Input: ns='' [int] -> output number 
+           directory='' [string] -> where filename is
+    """
+    def __init__(self, ns, directory=''):
+
+         def NStepStr(ns):
+             nsstr = str(ns)
+             while len(nsstr) < 4:
+                 nsstr = '0'+nsstr
+             return nsstr
+
+         if len(directory) > 1:
+             if directory[-1] != '/':
+                 directory += '/'
+
+         nstepstr = NStepStr(ns)
+         fname = directory+"part_data."+nstepstr+".dbl"
+         fdata = open(fname,"rb")
+         fmt1 = "<"+"i"
+         fmt2 = "<"+"d"
+
+         nb1 = struct.calcsize(fmt1)
+         nb2 = struct.calcsize(fmt2)
+
+         NOP = struct.unpack(fmt1, fdata.read(nb1))[0]
+         NDIM = 3 # hard coded. 
+         P_Step = struct.unpack(fmt1, fdata.read(nb1))[0]
+         P_Time = struct.unpack(fmt2, fdata.read(nb2))[0]
+
+         dtype = np.dtype([
+             ("pid", np.int32),
+             ("pcell_x", np.int32),
+             ("pcell_y", np.int32),
+             ("pcell_z", np.int32),
+             ("pos_x", np.float64),
+             ("pos_y", np.float64),
+             ("pos_z", np.float64),
+             ("vel_x", np.float64),
+             ("vel_y", np.float64),
+             ("vel_z", np.float64),
+             ("tstop", np.float64),
+             #("radius", np.float64),
+             ])
+
+         P_DataDict = np.fromfile(fdata,dtype=dtype)
+         fdata.close()
+
+         sorter = P_DataDict['pid'].argsort()
+         DataDict = P_DataDict[sorter]
+
+         particles_radius = np.array([0.0001,0.001,0.01,0.1,0.3,1.,3.,10.,100.,1000.])
+
+         self.NOP = NOP
+         self.P_Time = P_Time
+         self.P_Step = P_Step
+         self.pid = DataDict['pid']
+         self.pcell_x = DataDict['pcell_x']
+         self.pcell_y = DataDict['pcell_y']
+         self.pcell_z = DataDict['pcell_z']
+         self.pos_x = DataDict['pos_x']
+         self.pos_y = DataDict['pos_y']
+         self.pos_z = DataDict['pos_z']
+         self.vel_x = DataDict['vel_x']
+         self.vel_y = DataDict['vel_y']
+         self.vel_z = DataDict['vel_z']
+         self.tstop = DataDict['tstop']
+         self.radius = [particles_radius[i] for j in range(100000) for i in range (10)]
 
 # ---------------------
 # define RT model class
@@ -1843,29 +1861,28 @@ print('gas flaring index = ', flaringindex)
 print('gas alpha turbulent viscosity = ', alphaviscosity)
 
 # gas surface density field:
-D = pload(ns=0,w_dir=dir)
-gas  = D.rho
-#gas  = Field(field='gasdens'+str(on)+'.dat', directory=dir)
+D = pload(ns=300,w_dir=dir)
+gas  = Field(field='rho', directory=dir)
 
 # 2D computational grid: R = grid cylindrical radius in code units, T = grid azimuth in radians
-R = D.x1
-T = D.x3
-#R = gas.redge
-#T = gas.pedge
+R = gas.redge
+T = gas.pedge
+
 # number of grid cells in the radial and azimuthal directions
-nrad = np.size(gas)
-nsec = np.size(gas)
-print(nrad,nsec)
+nrad = np.shape(D.x1)[2]
+nsec = np.shape(D.x3)[0]
+
 # extra useful quantities (code units)
 Rinf = gas.redge[0:len(gas.redge)-1]
 Rsup = gas.redge[1:len(gas.redge)]
-surface  = np.zeros(gas.data.shape) # 2D array containing surface of each grid cell
+
+surface  = np.zeros((nsec,nrad)) # 2D array containing surface of each grid cell
 surf = pi * (Rsup*Rsup - Rinf*Rinf) / nsec # surface of each grid cell (code units)
 for th in range(nsec):
-    surface[:,th] = surf
+    surface[th,:] = surf
 
 # Mass of gas in units of the star's mass
-Mgas = np.sum(gas.data*surface)
+Mgas = np.sum(gas.data[0,:,:]*surface)
 print('Mgas / Mstar= '+str(Mgas)+' and Mgas [kg] = '+str(Mgas*gas.cumass))
 
 # Allocate arrays
@@ -1907,22 +1924,26 @@ print('--------- computing dust surface density ----------')
 if (RTdust_or_gas == 'dust' and recalc_density == 'Yes' and polarized_scat == 'No' and fargo3d == 'No'):
 
     # read information on the dust particles
-    (rad, azi, vr, vt, Stokes, a) = np.loadtxt(dir+'/dustsystat'+str(on)+'.dat', unpack=True)
+    #(rad, azi, vr, vt, Stokes, a) = np.loadtxt(dir+'/dustsystat'+str(on)+'.dat', unpack=True)
+    pdata = Particles(ns=9,directory=dir)
+    rad = pdata.pos_x
+    azi = pdata.pos_z
+    vr = pdata.vel_x
+    vt = pdata.vel_z
+    Stokes = pdata.tstop
+    a = pdata.radius
 
     # Populate dust bins
-    for m in range (len(a)):   # CB: sum over dust particles
+    for m in range (len(rad)):   # CB: sum over dust particles
         r = rad[m]
         t = azi[m]
         # radial index of the cell where the particle is
-        if radialspacing == 'L':
-            i = int(np.log(r/gas.redge.min())/np.log(gas.redge.max()/gas.redge.min()) * nrad)
-        else:
-            i = np.argmin(np.abs(gas.redge-r))
-        if (i < 0 or i >= nrad):
+        i = pdata.pcell_x[m]
+        if (i < 0 or i >= nrad+2):
             sys.exit('pb with i = ', i, ' in recalc_density step: I must exit!')
         # azimuthal index of the cell where the particle is
         # (general expression since grid spacing in azimuth is always arithmetic)
-        j = int((t-gas.pedge.min())/(gas.pedge.max()-gas.pedge.min()) * nsec)
+        j = pdata.pcell_z[m]-2
         if (j < 0 or j >= nsec):
             sys.exit('pb with j = ', j, ' in recalc_density step: I must exit!')
         # particle size
@@ -1943,7 +1964,7 @@ if (RTdust_or_gas == 'dust' and recalc_density == 'Yes' and polarized_scat == 'N
 
     # dustcube currently contains N_i (r,phi), the number of particles per bin size in every grid cell
     dustcube = dust.reshape(nbin, nsec, nrad)
-    dustcube = np.swapaxes(dustcube,1,2)  # means nbin, nrad, nsec
+    #dustcube = np.swapaxes(dustcube,1,2)  # means nbin, nrad, nsec
 
     frac = np.zeros(nbin)
     buf = 0.0
@@ -1956,6 +1977,7 @@ if (RTdust_or_gas == 'dust' and recalc_density == 'Yes' and polarized_scat == 'N
         buf += M_i_dust
         print('Dust mass [in units of Mstar] in species ', ibin, ' = ', M_i_dust)
         # dustcube, which contained N_i(r,phi), now contains sigma_i_dust (r,phi)
+        print(np.shape(dustcube[ibin,:,:]),np.shape(M_i_dust),np.shape(surface),np.shape(nparticles[ibin]))
         dustcube[ibin,:,:] *= M_i_dust / surface / nparticles[ibin]
         # conversion in g/cm^2
         dustcube[ibin,:,:] *= (gas.cumass*1e3)/((gas.culength*1e2)**2.)  # dimensions: nbin, nrad, nsec
