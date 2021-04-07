@@ -1870,6 +1870,7 @@ T = gas.pedge
 
 # number of grid cells in the radial and azimuthal directions
 nrad = np.shape(D.x1)[2]
+ncol = np.shape(D.x2)[1]
 nsec = np.shape(D.x3)[0]
 
 # extra useful quantities (code units)
@@ -1977,7 +1978,6 @@ if (RTdust_or_gas == 'dust' and recalc_density == 'Yes' and polarized_scat == 'N
         buf += M_i_dust
         print('Dust mass [in units of Mstar] in species ', ibin, ' = ', M_i_dust)
         # dustcube, which contained N_i(r,phi), now contains sigma_i_dust (r,phi)
-        print(np.shape(dustcube[ibin,:,:]),np.shape(M_i_dust),np.shape(surface),np.shape(nparticles[ibin]))
         dustcube[ibin,:,:] *= M_i_dust / surface / nparticles[ibin]
         # conversion in g/cm^2
         dustcube[ibin,:,:] *= (gas.cumass*1e3)/((gas.culength*1e2)**2.)  # dimensions: nbin, nrad, nsec
@@ -2046,7 +2046,8 @@ if (RTdust_or_gas == 'dust' and recalc_density == 'Yes' and polarized_scat == 'N
 if (RTdust_or_gas == 'dust' and recalc_density == 'Yes' and polarized_scat == 'Yes'):
 
     dustcube = dust.reshape(nbin, nsec, nrad)
-    dustcube = np.swapaxes(dustcube,1,2)  # means nbin, nrad, nsec
+    print(np.shape(dustcube))
+    #dustcube = np.swapaxes(dustcube,1,2)  # means nbin, nrad, nsec
     frac = np.zeros(nbin)
     buf = 0.0
 
@@ -2103,7 +2104,7 @@ if RTdust_or_gas == 'dust' and recalc_density == 'Yes':
     DUSTOUT.write(str(int(nbin))+' \n')             # nbin size bins
 
     # array (ncol, nbin, nrad, nsec)
-    rhodustcube = np.zeros((ncol,nbin,nrad,nsec))
+    rhodustcube = np.zeros((ncol,nbin,nsec,nrad))
 
     # dust aspect ratio as function of ibin and r (or actually, R, cylindrical radius)
     hd = np.zeros((nbin,nrad))
@@ -2142,15 +2143,15 @@ if RTdust_or_gas == 'dust' and recalc_density == 'Yes':
             hd[ibin,:] = hgas
 
     # dust aspect ratio as function of ibin, r and phi (2D array for each size bin)
-    hd2D = np.zeros((nbin,nrad,nsec))
+    hd2D = np.zeros((nbin,nsec,nrad))
     for th in range(nsec):
-        hd2D[:,:,th] = hd    # nbin, nrad, nsec
+        hd2D[:,th,:] = hd    # nbin, nrad, nsec
 
     # grid radius function of ibin, r and phi (2D array for each size bin)
-    r2D = np.zeros((nbin,nrad,nsec))
+    r2D = np.zeros((nbin,nsec,nrad))
     for ibin in range(nbin):
         for th in range(nsec):
-            r2D[ibin,:,th] = gas.rmed
+            r2D[ibin,th,:] = gas.rmed
 
     # work out exponential and normalization factors exp(-z^2 / 2H_d^2)
     # with z = r cos(theta) and H_d = h_d x R = h_d x r sin(theta)
@@ -2166,7 +2167,8 @@ if RTdust_or_gas == 'dust' and recalc_density == 'Yes':
     # the dust's mass volume density x the volume of each grid cell does give us the right
     # total dust mass, which equals ratio x Mgas.
     rhofield = np.sum(rhodustcube, axis=1)  # sum over dust bins
-    Redge,Cedge,Aedge = np.meshgrid(gas.redge, gas.tedge, gas.pedge)   # ncol+1, nrad+1, Nsec+1
+    print("rhodustcube ",np.shape(rhodustcube)," rhofield",np.shape(rhofield))
+    Aedge,Cedge,Redge = np.meshgrid(gas.pedge, gas.tedge, gas.redge)   # ncol+1, nrad+1, Nsec+1
     r2 = Redge*Redge
     jacob  = r2[:-1,:-1,:-1] * np.sin(Cedge[:-1,:-1,:-1])
     dphi   = Aedge[:-1,:-1,1:] - Aedge[:-1,:-1,:-1]     # same as 2pi/nsec
@@ -2174,6 +2176,7 @@ if RTdust_or_gas == 'dust' and recalc_density == 'Yes':
     dtheta = Cedge[1:,:-1,:-1] - Cedge[:-1,:-1,:-1]
     # volume of a cell in cm^3
     vol = jacob * dr * dphi * dtheta * ((gas.culength*1e2)**3)       # ncol, nrad, Nsec
+    print(np.shape(jacob),np.shape(vol))
     total_mass = np.sum(rhofield*vol)
     normalization_factor =  ratio * Mgas * (gas.cumass*1e3) / total_mass
     rhodustcube = rhodustcube*normalization_factor
