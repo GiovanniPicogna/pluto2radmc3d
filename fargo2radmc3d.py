@@ -97,7 +97,7 @@ class pload(object):
         """
 
         self.NStep = ns
-        self.Dt = 0.0
+        self.Dt = 1.e-4
 
         self.n1 = 0
         self.n2 = 0
@@ -151,7 +151,6 @@ class pload(object):
         **Inputs**:
           varfile -- name of the out file which has variable information. 
         """
-        print(varfile)
         fh5 = h5.File(varfile, 'r')
         self.filetype = 'single_file'
         self.endianess = '>'  # not used with AMR, kept for consistency
@@ -322,7 +321,6 @@ class pload(object):
         vars = np.zeros((nx, ny, nz, nvar))
 
         h5vardict = {}
-        print(myvars)
         for iv in range(nvar):
             h5vardict[myvars[iv]] = self.getVar(fp, 300, myvars[iv])
             #h5vardict[myvars[iv]] = vars[:,:,:,iv].squeeze()
@@ -444,6 +442,7 @@ class Mesh():
         self.redge = domain_rad                              # r-edge
         self.rmed = 2.0*(domain_rad[1:]*domain_rad[1:]*domain_rad[1:] - domain_rad[:-1]*domain_rad[:-1] *
                          domain_rad[:-1]) / (domain_rad[1:]*domain_rad[1:] - domain_rad[:-1]*domain_rad[:-1]) / 3.0  # r-center
+        self.dr = self.redge[1:] - self.redge[:-1]
 
         # -----
         # colatitude
@@ -468,19 +467,21 @@ class Mesh():
         self.tedge = domain_th                    # colatitude of cell faces
         # colatitude of cell centers
         self.tmed = 0.5*(domain_th[:-1] + domain_th[1:])
+        self.dth = self.tedge[1:] - self.tedge[:-1]
 
         # define number of cells in vertical direction for arrays in
         # cylindrical coordinates
         self.nver = 200  # seems large enough
         # define an array for vertical altitude across the midplane
-        zbuf = -self.rmed.max()*np.cos(self.tmed)
-        self.zmed = np.linspace(zbuf.min(), zbuf.max(), self.nver)
+        #zbuf = -self.rmed.max()*np.cos(self.tmed)
+        self.zmed = np.outer(self.rmed,np.cos(self.tmed))
 
         # -----
         # azimuth
         # -----
         self.pedge = np.linspace(0., 2.*np.pi, self.nsec+1)  # phi-edge
         self.pmed = 0.5*(self.pedge[:-1] + self.pedge[1:])  # phi-center
+        self.dp = self.pedge[1:] - self.pedge[:-1]
 
 
 # -------------------------------------------------------------------
@@ -510,6 +511,7 @@ class Field(Mesh):
         nrad = np.shape(D.rho)[2]
         ncol = np.shape(D.rho)[1]
         nsec = np.shape(D.rho)[0]
+        nsec = 600
 
         nrad = int(nrad)
         nsec = int(nsec)
@@ -562,7 +564,13 @@ class Field(Mesh):
         else:
             self.r = self.rmed
 
-        self.data = D.rho  # scalar data is here.
+        #self.data = D.rho  # scalar data is here.
+        self.data = np.zeros((nsec,ncol,nrad))
+        for ns in range(nsec):
+            self.data[ns] = D.rho
+        self.x3 = self.pmed
+        self.x3r = self.pedge
+        self.dx3 = self.pedge[1:] - self.pedge[:-1]
 
     def __open_field(self, f, var, dtype):
         """
@@ -576,8 +584,6 @@ class Field(Mesh):
 # -------------------------------------------------------------------
 # reading particles
 # -------------------------------------------------------------------
-
-
 class Particles():
     # G. Picogna
     """
@@ -657,8 +663,6 @@ class Particles():
 # ---------------------
 # define RT model class
 # ---------------------
-
-
 class RTmodel():
     def __init__(self, distance=140, label='', npix=256, Lambda=800,
                  incl=30.0, posang=0.0, phi=0.0,
@@ -1813,19 +1817,19 @@ nsec = np.shape(gas.data)[0]
 Rinf = gas.redge[0:len(gas.redge)-1]
 Rsup = gas.redge[1:len(gas.redge)]
 
-# 2D array containing surface of each grid cell
-surface = np.zeros((nsec, nrad))
-# surface of each grid cell (code units)
-surf = pi * (Rsup*Rsup - Rinf*Rinf) / nsec
-for th in range(nsec):
-    surface[th, :] = surf
+# volume of each grid cell (code units)
+volume = np.zeros((nsec,ncol,nrad))
+for i in range(nsec):
+    for j in range(ncol):
+        for k in range(nrad):
+            volume[i,j,k] = gas.rmed[k]**2 * np.sin(gas.tmed[j]) * gas.dr[k] * gas.dth[j] * gas.dp[i]
 
 # Mass of gas in units of the star's mass
-Mgas = np.sum(gas.data[0, :, :]*surface)
+Mgas = np.sum(gas.data*volume)
 print('Mgas / Mstar= '+str(Mgas)+' and Mgas [kg] = '+str(Mgas*gas.cumass))
 
 # Allocate arrays
-dust = np.zeros((nsec*nrad*nbin))
+dust = np.zeros((nsec*ncol*nrad*nbin))
 if fargo3d == 'No' or polarized_scat == 'Yes':
     bins = np.logspace(np.log10(amin), np.log10(amax), nbin+1)
     nparticles = np.zeros(nbin)     # number of particles per bin size
@@ -1905,7 +1909,7 @@ if (RTdust_or_gas == 'dust' and recalc_density == 'Yes' and polarized_scat == 'N
               str(bins[ibin])+' and '+str(bins[ibin+1])+' meters')
 
     # dustcube currently contains N_i (r,phi), the number of particles per bin size in every grid cell
-    dustcube = dust.reshape(nbin, nsec, nrad)
+    dustcube = dust.reshape(nbin, nsec, ncol, nrad)
     # dustcube = np.swapaxes(dustcube,1,2)  # means nbin, nrad, nsec
 
     frac = np.zeros(nbin)
@@ -1921,10 +1925,10 @@ if (RTdust_or_gas == 'dust' and recalc_density == 'Yes' and polarized_scat == 'N
         print('Dust mass [in units of Mstar] in species ',
               ibin, ' = ', M_i_dust)
         # dustcube, which contained N_i(r,phi), now contains sigma_i_dust (r,phi)
-        dustcube[ibin, :, :] *= M_i_dust / surface / nparticles[ibin]
+        dustcube[ibin, :, :, :] *= M_i_dust / volume / nparticles[ibin]
         # conversion in g/cm^2
         # dimensions: nbin, nrad, nsec
-        dustcube[ibin, :, :] *= (gas.cumass*1e3)/((gas.culength*1e2)**2.)
+        dustcube[ibin, :, :, :] *= (gas.cumass*1e3)/((gas.culength*1e2)**2.)
 
     # Overwrite first bin (ibin = 0) to model extra bin with small dust tightly coupled to the gas
     if bin_small_dust == 'Yes':
@@ -1942,11 +1946,11 @@ if (RTdust_or_gas == 'dust' and recalc_density == 'Yes' and polarized_scat == 'N
                               ** 2.)  # dimensions: nbin, nrad, nsec
 
     print('Total dust mass [g] = ', np.sum(
-        dustcube[:, :, :]*surface*(gas.culength*1e2)**2.))
+        dustcube[:, :, :, :]*volume*(gas.culength*1e2)**2.))
     print('Total dust mass [Mgas] = ', np.sum(
-        dustcube[:, :, :]*surface*(gas.culength*1e2)**2.)/(Mgas*gas.cumass*1e3))
+        dustcube[:, :, :, :]*volume*(gas.culength*1e2)**2.)/(Mgas*gas.cumass*1e3))
     print('Total dust mass [Mstar] = ', np.sum(
-        dustcube[:, :, :]*surface*(gas.culength*1e2)**2.)/(gas.cumass*1e3))
+        dustcube[:, :, :, :]*volume*(gas.culength*1e2)**2.)/(gas.cumass*1e3))
 
     # Total dust surface density
     dust_surface_density = np.sum(dustcube, axis=0)
@@ -2069,59 +2073,50 @@ if RTdust_or_gas == 'dust' and recalc_density == 'Yes':
     DUSTOUT.write(str(int(nbin))+' \n')             # nbin size bins
 
     # array (ncol, nbin, nrad, nsec)
-    rhodustcube = np.zeros((ncol, nbin, nsec, nrad))
+    rhodustcube = np.zeros((nbin, nsec, ncol, nrad))
 
     # dust aspect ratio as function of ibin and r (or actually, R, cylindrical radius)
     hd = np.zeros((nbin, nrad))
 
-    # work out averaged Stokes number per size bin with fargo3d
-    # Epstein regime assumed so far in the code -> St ~ pi/2 (s x rho_int) / Sigma_gas
-    # where Sigma_gas should denote the azimuthally-averaged gas surface density here
-    # so that St is understood as a 2D array (nbin, nrad)
-    if fargo3d == 'Yes':
-        Stokes_fargo3d = np.zeros((nbin, nrad))
-        axirhogas = np.sum(gas.data, axis=1)/nsec  # in code units
-        axirhogas *= (gas.cumass*1e3)/((gas.culength*1e2)**2.)  # in g/cm^2
-        for ibin in range(nbin):
-            # since dust size is in meters...
-            Stokes_fargo3d[ibin, :] = 0.5*np.pi * \
-                (dust_size[ibin]*1e2)*dust_internal_density/axirhogas
+    # gus aspect ratio
+    hgas = np.zeros(nrad)
+    for irad in range(nrad):
+        hgas[irad] = (gas.rmed[irad]*np.cos(gas.tmed[:])*gas.data[0,:,irad]).sum(axis=0)/(gas.data[0,:,irad]).sum(axis=0)
 
     for ibin in range(nbin):
         if polarized_scat == 'No':
-            if fargo3d == 'No':
-                # avg stokes number for that bin
-                St = avgstokes[ibin]
-            else:
-                St = Stokes_fargo3d[ibin]
+            # avg stokes number for that bin
+            St = avgstokes[ibin]
+        for irad in range(nrad):
+            hd[ibin,irad] = (gas.rmed[irad]*np.cos(gas.tmed[:])*gas.data[0,:,irad]).sum(axis=0)/(gas.data[0,:,irad]).sum(axis=0)
         # gas aspect ratio (gas.rmed[i] = R in code units)
-        hgas = aspectratio * (gas.rmed)**(flaringindex)
+        #hgas = aspectratio * (gas.rmed)**(flaringindex)
         # vertical extension depends on grain Stokes number
         # T = theoretical: hd/hgas = sqrt(alpha/(St+alpha))
         # T2 = theoretical: hd/hgas = sqrt(Dz/(St+Dz)) with Dz = 10xalpha here is the coefficient for
         # vertical diffusion at midplane, which can differ from alpha
         # F = extrapolation from the simulations by Fromang & Nelson 09
         # G = Gaussian = same as gas (case of well-coupled dust for polarized intensity images)
-        if z_expansion == 'F':
-            hd[ibin, :] = 0.7 * hgas * ((St+1./St)/1000.)**(0.2)
-        if z_expansion == 'T':
-            hd[ibin, :] = hgas * np.sqrt(alphaviscosity/(alphaviscosity+St))
-        if z_expansion == 'T2':
-            hd[ibin, :] = hgas * \
-                np.sqrt(10.0*alphaviscosity/(10.0*alphaviscosity+St))
-        if z_expansion == 'G':
-            hd[ibin, :] = hgas
+        #if z_expansion == 'F':
+        #    hd[ibin, :] = 0.7 * hgas * ((St+1./St)/1000.)**(0.2)
+        #if z_expansion == 'T':
+        #    hd[ibin, :] = hgas * np.sqrt(alphaviscosity/(alphaviscosity+St))
+        #if z_expansion == 'T2':
+        #    hd[ibin, :] = hgas * \
+        #        np.sqrt(10.0*alphaviscosity/(10.0*alphaviscosity+St))
+        #if z_expansion == 'G':
+        #    hd[ibin, :] = hgas
 
     # dust aspect ratio as function of ibin, r and phi (2D array for each size bin)
-    hd2D = np.zeros((nbin, nsec, nrad))
+    hd2D = np.zeros((nbin, nsec, ncol, nrad))
     for th in range(nsec):
-        hd2D[:, th, :] = hd    # nbin, nrad, nsec
+        hd2D[:, th, :, :] = hd    # nbin, nrad, nsec
 
     # grid radius function of ibin, r and phi (2D array for each size bin)
-    r2D = np.zeros((nbin, nsec, nrad))
+    r2D = np.zeros((nbin, nsec, ncol, nrad))
     for ibin in range(nbin):
         for th in range(nsec):
-            r2D[ibin, th, :] = gas.rmed
+            r2D[ibin, th, :, :] = gas.rmed
 
     # work out exponential and normalization factors exp(-z^2 / 2H_d^2)
     # with z = r cos(theta) and H_d = h_d x R = h_d x r sin(theta)
