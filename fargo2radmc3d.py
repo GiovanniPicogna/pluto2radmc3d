@@ -36,7 +36,7 @@
 # -----------------------------
 import numpy as np
 import matplotlib
-#matplotlib.use('Agg')         # SP
+# matplotlib.use('Agg')         # SP
 import matplotlib.pyplot as plt
 import pylab
 import math
@@ -80,468 +80,496 @@ pi = 3.141592653589793116       # [pi]
 R_Sun = 6.961e10                # [R_sun] = cm
 pc = 3.085678e18                # [pc] = cm
 kB = 1.380658e-16               # [kB] = erg K-1
-c  = 2.99792458e10              # [c] = cm s-1
-h  = 6.6261e-27                 # [h = Planck constant] = g cm2 s-1
+c = 2.99792458e10              # [c] = cm s-1
+h = 6.6261e-27                 # [h = Planck constant] = g cm2 s-1
+
 
 class pload(object):
     # based on A. Mignone routine
-     def __init__(self, ns, w_dir=None, datatype=None, level = 0, x1range=None, x2range=None, x3range=None):
-         """Loads the data.
-         **Inputs**:
-           ns -- Step Number of the data file w_dir -- path to the directory which has the data files\n
-           datatype -- Datatype (default = 'double')
-       
-         **Outputs**:
-           pyPLUTO pload object whose keys are arrays of data values.
-         """
+    def __init__(self, ns, w_dir=None, datatype=None, level=0, x1range=None, x2range=None, x3range=None):
+        """Loads the data.
+        **Inputs**:
+          ns -- Step Number of the data file w_dir -- path to the directory which has the data files\n
+          datatype -- Datatype (default = 'double')
 
-         self.NStep = ns
-         self.Dt = 0.0
- 
-         self.n1 = 0
-         self.n2 = 0
-         self.n3 = 0
- 
-         self.x1 = []
-         self.x2 = []
-         self.x3 = []
-         self.dx1 = []
-         self.dx2 = []
-         self.dx3 = []
-         
-         self.x1range = x1range
-         self.x2range = x2range
-         self.x3range = x3range
- 
-         self.NStepStr = str(self.NStep)
-         while len(self.NStepStr) < 4:
-             self.NStepStr = '0'+self.NStepStr
- 
-         if datatype is None:
-             datatype = "double"
-         self.datatype = datatype
- 
-         self.level = level
- 
-         if w_dir is None:
-             w_dir = os.getcwd() + '/'
-         self.wdir = w_dir
-         
-         Data_dictionary = self.ReadDataFile(self.NStepStr)
-         for keys in Data_dictionary:
-             object.__setattr__(self, keys, Data_dictionary.get(keys))
- 
-     def ReadTimeInfo(self, timefile):
-         """ Read time info from the outfiles.
-         **Inputs**:
-            timefile -- name of the out file which has timing information. 
-         """
- 
-         #if (self.datatype == 'hdf5'):
-         fh5 = h5.File(timefile,'r') 
-         self.SimTime = fh5.attrs.get('time')
-         #self.Dt = 1.e-2 # Should be erased later given the level in AMR
-         fh5.close()
-         #else:
-         #    ns = self.NStep
-         #    f_var = open(timefile, "r")
-         #    tlist = []
-         #    for line in f_var.readlines():
-         #        tlist.append(line.split())
-         #    self.SimTime = float(tlist[ns][1])
-         #    self.Dt = float(tlist[ns][2])
- 
-     def ReadVarFile(self, varfile):
-         """ Read variable names from the outfiles.
-         **Inputs**:
-           varfile -- name of the out file which has variable information. 
-         """
+        **Outputs**:
+          pyPLUTO pload object whose keys are arrays of data values.
+        """
 
-         #if (self.datatype == 'hdf5'):
-         #    fh5 = h5.File(varfile,'r') 
-         #    self.filetype = 'single_file' 
-         #    self.endianess = '>' # not used with AMR, kept for consistency
-         #    self.vars = []
-         #    for iv in range(fh5.attrs.get('num_components')):
-         #        self.vars.append(fh5.attrs.get('component_'+str(iv)))
-         #    fh5.close()
-         #elif (self.datatype == 'dbl.h5'):
-         print(varfile)
-         fh5 = h5.File(varfile,'r') 
-         self.filetype = 'single_file' 
-         self.endianess = '>' # not used with AMR, kept for consistency
-         self.vars = []
-         print(np.size(fh5['Timestep_300/vars'].keys()))
-         for iv in range(np.size(fh5['Timestep_300/vars'].keys())):
-             self.vars.append(fh5['Timestep_300/vars'].keys()[iv])
-         fh5.close()
-         #else:
-         #    vfp = open(varfile, "r")
-         #    varinfo = vfp.readline().split()
-         #    self.filetype = varinfo[4]
-         #    self.endianess = varinfo[5]
-         #    self.vars = varinfo[6:]
-         #    vfp.close()
+        self.NStep = ns
+        self.Dt = 0.0
 
-     def ReadGridFile(self, gridfile):
-         """ Read grid values from the grid.out file.
-         *Inputs**:    
-           gridfile -- name of the grid.out file which has information about the grid. 
-         """
+        self.n1 = 0
+        self.n2 = 0
+        self.n3 = 0
 
-         xL = []
-         xR = []
-         nmax = []
-         gfp = open(gridfile, "r")
-         for i in gfp.readlines():
-             if len(i.split()) == 1:
-                 try:
-                     int(i.split()[0])
-                     nmax.append(int(i.split()[0]))
-                 except:
-                     pass
-                 
-             if len(i.split()) == 3:
-                 try:
-                     int(i.split()[0])
-                     xL.append(float(i.split()[1]))
-                     xR.append(float(i.split()[2]))
-                 except:
-                     if (i.split()[1] == 'GEOMETRY:'):
-                         self.geometry=i.split()[2]
-                     pass
-                 
-         self.n1, self.n2, self.n3 = nmax
-         n1 = self.n1
-         n1p2 = self.n1 + self.n2
-         n1p2p3 = self.n1 + self.n2 + self.n3
-         self.x1 = np.asarray([0.5*(xL[i]+xR[i]) for i in range(n1)])
-         self.dx1 = np.asarray([(xR[i]-xL[i]) for i in range(n1)])
-         self.x2 = np.asarray([0.5*(xL[i]+xR[i]) for i in range(n1, n1p2)])
-         self.dx2 = np.asarray([(xR[i]-xL[i]) for i in range(n1, n1p2)])
-         self.x3 = np.asarray([0.5*(xL[i]+xR[i]) for i in range(n1p2, n1p2p3)])
-         self.dx3 = np.asarray([(xR[i]-xL[i]) for i in range(n1p2, n1p2p3)])
- 
-         # Stores the total number of points in '_tot' variable in case only
-         # a portion of the domain is loaded. Redefine the x and dx arrays
-         # to match the requested ranges
-         self.n1_tot = self.n1 ; self.n2_tot = self.n2 ; self.n3_tot = self.n3
-         if (self.x1range != None):
-             self.n1_tot = self.n1
-             self.irange = range(abs(self.x1-self.x1range[0]).argmin(),abs(self.x1-self.x1range[1]).argmin()+1)
-             self.n1  = len(self.irange)
-             self.x1  = self.x1[self.irange]
-             self.dx1 = self.dx1[self.irange]
-         else:
-             self.irange = range(self.n1)
-         if (self.x2range != None):
-             self.n2_tot = self.n2
-             self.jrange = range(abs(self.x2-self.x2range[0]).argmin(),abs(self.x2-self.x2range[1]).argmin()+1)
-             self.n2  = len(self.jrange)
-             self.x2  = self.x2[self.jrange]
-             self.dx2 = self.dx2[self.jrange]
-         else:
-             self.jrange = range(self.n2)
-         if (self.x3range != None):
-             self.n3_tot = self.n3
-             self.krange = range(abs(self.x3-self.x3range[0]).argmin(),abs(self.x3-self.x3range[1]).argmin()+1)
-             self.n3  = len(self.krange)
-             self.x3  = self.x3[self.krange]
-             self.dx3 = self.dx3[self.krange]
-         else:
-             self.krange = range(self.n3)
-         self.Slice=(self.x1range != None) or (self.x2range != None) or (self.x3range != None)
- 
-         # Create the xr arrays containing the edges positions
-         # Useful for pcolormesh which should use those
-         self.x1r = np.zeros(len(self.x1)+1) ; self.x1r[1:] = self.x1 + self.dx1/2.0 ; self.x1r[0] = self.x1r[1]-self.dx1[0]
-         self.x2r = np.zeros(len(self.x2)+1) ; self.x2r[1:] = self.x2 + self.dx2/2.0 ; self.x2r[0] = self.x2r[1]-self.dx2[0]
-         self.x3r = np.zeros(len(self.x3)+1) ; self.x3r[1:] = self.x3 + self.dx3/2.0 ; self.x3r[0] = self.x3r[1]-self.dx3[0]
- 
-         prodn = self.n1*self.n2*self.n3
-         if prodn == self.n1:
-             self.nshp = (self.n1)
-         elif prodn == self.n1*self.n2:
-             self.nshp = (self.n2, self.n1)
-         else:
-             self.nshp = (self.n3, self.n2, self.n1)
+        self.x1 = []
+        self.x2 = []
+        self.x3 = []
+        self.dx1 = []
+        self.dx2 = []
+        self.dx3 = []
 
-     def getGrid(self, fp, dim):
-         x = fp['node_coords'][dim][:]
-         x = x.astype('float64')
-         return x
+        self.x1range = x1range
+        self.x2range = x2range
+        self.x3range = x3range
 
-     def getGridCell(self, fp, dim):
-         x = fp['cell_coords'][dim][:]
-         x = x.astype('float64')
-         return x
+        self.NStepStr = str(self.NStep)
+        while len(self.NStepStr) < 4:
+            self.NStepStr = '0'+self.NStepStr
 
-     def getVar(self, fp, step, var):
-         returnData=(fp["Timestep_"+str(step)+"/vars"][var][:])
-         return returnData
+        if datatype is None:
+            datatype = "double"
+        self.datatype = datatype
 
-     def DataScanHDF5(self, fp, myvars):
-         """ Scans HDF5 data files in PLUTO. 
-         
-         **Inputs**:
-         
-           fp     -- Data file pointer\n
-           myvars -- Names of the variables to read\n
-         
-         **Output**:
-         
-           Dictionary consisting of variable names as keys and its values. 
-         
-         """
+        self.level = level
 
-         # Read the grid information
-         dim = np.size(fp['cell_coords'].keys())
+        if w_dir is None:
+            w_dir = os.getcwd() + '/'
+        self.wdir = w_dir
 
-         x1r = self.getGrid(fp, 'X')
-         x1  = self.getGridCell(fp, 'X')
-         nx = x1.shape[2]
-         dx1 = x1r[1:]-x1r[:-1]
-         ny = 0
-         nz = 0
-         dt = 0
-         if(dim>1):
-             x2r = self.getGrid(fp, 'Y')
-             x2  = self.getGridCell(fp, 'Y')
-             ny = x2.shape[1]
-             dx2 = x2r[1:]-x2r[:-1]
-         if(dim>2):
-             x3r = self.getGrid(fp, 'Z')
-             x3 = self.getGridCell(fp, 'Z')
-             nz = x3.shape[0]
-             dx3 = x3r[1:]-x3r[:-1]
+        Data_dictionary = self.ReadDataFile(self.NStepStr)
+        for keys in Data_dictionary:
+            object.__setattr__(self, keys, Data_dictionary.get(keys))
 
-         NewGridDict = dict([('n1',nx),('n2',ny),('n3',nz),\
-                             ('x1',x1),('x2',x2),('x3',x3),\
-                             ('x1r',x1r),('x2r',x2r),('x3r',x3r),\
-                             ('dx1',dx1),('dx2',dx2),('dx3',dx3),\
-                             ('Dt',dt)])
-         
-         # Variables table
-         nvar = len(myvars)
-         vars = np.zeros((nx,ny,nz,nvar))
-         
-         h5vardict={}
-         print(myvars)
-         for iv in range(nvar):
-             h5vardict[myvars[iv]] = self.getVar(fp,300,myvars[iv])
-             #h5vardict[myvars[iv]] = vars[:,:,:,iv].squeeze()
+    def ReadTimeInfo(self, timefile):
+        """ Read time info from the outfiles.
+        **Inputs**:
+           timefile -- name of the out file which has timing information. 
+        """
 
-         OutDict = dict(NewGridDict)
-         OutDict.update(h5vardict)
-         return OutDict
+        # if (self.datatype == 'hdf5'):
+        fh5 = h5.File(timefile, 'r')
+        self.SimTime = fh5.attrs.get('time')
+        # self.Dt = 1.e-2 # Should be erased later given the level in AMR
+        fh5.close()
+        # else:
+        #    ns = self.NStep
+        #    f_var = open(timefile, "r")
+        #    tlist = []
+        #    for line in f_var.readlines():
+        #        tlist.append(line.split())
+        #    self.SimTime = float(tlist[ns][1])
+        #    self.Dt = float(tlist[ns][2])
 
-     def DataScan(self, fp, n1, n2, n3, endian, dtype, off=None):
-         """ Scans the data files in all formats. 
-         
-         **Inputs**:
-           
-           fp -- Data file pointer\n
-           n1 -- No. of points in X1 direction\n
-           n2 -- No. of points in X2 direction\n
-           n3 -- No. of points in X3 direction\n
-           endian -- Endianess of the data\n
-           dtype -- datatype, eg : double, float, vtk, hdf5\n
-           off -- offset (for avoiding staggered B fields) 
-      
-         **Output**:
-          
-           Dictionary consisting of variable names as keys and its values. 
- 
-         """
+    def keys(self, f):
+        return [key for key in f.keys()]
 
-         if off is not None:
-             off_fmt = endian+str(off)+dtype
-             nboff = np.dtype(off_fmt).itemsize
-             fp.read(nboff)
- 
-         n1_tot = self.n1_tot ; n2_tot = self.n2_tot; n3_tot = self.n3_tot
- 
-         A = array.array(dtype)
-         fmt = endian+str(n1_tot*n2_tot*n3_tot)+dtype
-         nb = np.dtype(fmt).itemsize 
-         A.fromstring(fp.read(nb))
-         
-         if (self.Slice):
-             darr = np.zeros((n1*n2*n3))
-             indxx = np.sort([n3_tot*n2_tot*k + j*n2_tot + i for i in self.irange for j in self.jrange for k in self.krange])
-             if (sys.byteorder != self.endianess):
-                 A.byteswap()
-             for ii,iii in enumerate(indxx):
-                 darr[ii] = A[iii]
-             darr = [darr]
-         else:
-             darr = np.frombuffer(A,dtype=np.dtype(fmt))
-         
-         return np.reshape(darr[0],self.nshp).transpose()
+    def ReadVarFile(self, varfile):
+        """ Read variable names from the outfiles.
+        **Inputs**:
+          varfile -- name of the out file which has variable information. 
+        """
 
-     def ReadSingleFile(self, datafilename, myvars, n1, n2, n3, endian, dtype, ddict):
-         """Reads a single data file, data.****.dtype.
-     
-         **Inputs**: 
- 
-           datafilename -- Data file name\n
-           myvars -- List of variable names to be read\n
-           n1 -- No. of points in X1 direction\n
-           n2 -- No. of points in X2 direction\n
-           n3 -- No. of points in X3 direction\n
-           endian -- Endianess of the data\n
-           dtype -- datatype\n
-           ddict -- Dictionary containing Grid and Time Information
-           which is updated
-      
-         **Output**:
- 
-           Updated Dictionary consisting of variable names as keys and its values.
-         """
-         #if self.datatype == 'hdf5':
-         fp = h5.File(datafilename,'r')
-         #else:
-         #    fp = open(datafilename, "rb")
-         
-         print "Reading Data file : %s"%datafilename
-         
- #        if self.datatype == 'vtk':
- #            vtkd = self.DataScanVTK(fp, n1, n2, n3, endian, dtype)
- #            ddict.update(vtkd)
- #        elif self.datatype == 'hdf5':
- #            h5d = self.DataScanHDF5(fp,myvars,self.level)
- #            ddict.update(h5d)   
- #        elif self.datatype == 'dbl.h5':
-         h5d = self.DataScanHDF5(fp,myvars)
-         ddict.update(h5d)  
- #        else:
- #            for i in range(len(myvars)):
- #                if myvars[i] == 'bx1s':
- #                    ddict.update({myvars[i]: self.DataScan(fp, n1, n2, n3, endian,
- #                                                           dtype, off=n2*n3)})
- #                elif myvars[i] == 'bx2s':
- #                    ddict.update({myvars[i]: self.DataScan(fp, n1, n2, n3, endian,
- #                                                           dtype, off=n3*n1)})
- #                elif myvars[i] == 'bx3s':
- #                    ddict.update({myvars[i]: self.DataScan(fp, n1, n2, n3, endian,
- #                                                           dtype, off=n1*n2)})
- #                else:
- #                    ddict.update({myvars[i]: self.DataScan(fp, n1, n2, n3, endian,
- #                                                           dtype)})
-         
-         fp.close()
-    
-     def ReadMultipleFiles(self, nstr, dataext, myvars, n1, n2, n3, endian,
-                           dtype, ddict):
-         """Reads a  multiple data files, varname.****.dataext.
-     
-         **Inputs**:
-       
-           nstr -- File number in form of a string\n
-           dataext -- Data type of the file, e.g., 'dbl', 'flt' or 'vtk' \n
-           myvars -- List of variable names to be read\n
-           n1 -- No. of points in X1 direction\n
-           n2 -- No. of points in X2 direction\n
-           n3 -- No. of points in X3 direction\n
-           endian -- Endianess of the data\n
-           dtype -- datatype\n
-           ddict -- Dictionary containing Grid and Time Information
-           which is updated.
-      
-         **Output**:
-           
-           Updated Dictionary consisting of variable names as keys and its values.
-     
-         """
-         for i in range(len(myvars)):
-             datafilename = self.wdir+myvars[i]+"."+nstr+dataext
-             fp = open(datafilename, "rb")
-             if self.datatype == 'vtk':
-                 ddict.update(self.DataScanVTK(fp, n1, n2, n3, endian, dtype))
-             else:
-                 ddict.update({myvars[i]: self.DataScan(fp, n1, n2, n3, endian,
-                                                        dtype)})
-             fp.close()
+        # if (self.datatype == 'hdf5'):
+        #    fh5 = h5.File(varfile,'r')
+        #    self.filetype = 'single_file'
+        #    self.endianess = '>' # not used with AMR, kept for consistency
+        #    self.vars = []
+        #    for iv in range(fh5.attrs.get('num_components')):
+        #        self.vars.append(fh5.attrs.get('component_'+str(iv)))
+        #    fh5.close()
+        # elif (self.datatype == 'dbl.h5'):
+        print(varfile)
+        fh5 = h5.File(varfile, 'r')
+        self.filetype = 'single_file'
+        self.endianess = '>'  # not used with AMR, kept for consistency
+        self.vars = []
+        for iv in range(len(fh5['Timestep_300/vars'].keys())):
+            self.vars.append(self.keys(fh5['Timestep_300/vars'])[iv])
 
-     def ReadDataFile(self, num):
-         """Reads the data file generated from PLUTO code.
- 
-         **Inputs**:
-     
-         num -- Data file number in form of an Integer.
- 
-         **Outputs**:
-     
-         Dictionary that contains all information about Grid, Time and 
-         variables.
- 
-         """
-         gridfile = self.wdir+"grid.out"
-         #if self.datatype == "float":
-         #    dtype = "f"
-         #    varfile = self.wdir+"flt.out"
-         #    dataext = ".flt"
-         #elif self.datatype == "vtk":
-         #    dtype = "f"
-         #    varfile = self.wdir+"vtk.out"
-         #    dataext=".vtk"
-         #elif self.datatype == 'hdf5':
-         #    dtype = 'd'
-         #    dataext = '.hdf5'
-         #    nstr = num
-         #    varfile = self.wdir+"data."+nstr+dataext
-         #elif self.datatype == 'h5':
-         dtype = 'd'
-         dataext = '.dbl.h5'
-         nstr = num
-         varfile = self.wdir+"data."+nstr+dataext
-         #else:
-         #    dtype = "d"
-         #    varfile = self.wdir+"dbl.out"
-         #    dataext = ".dbl"
-         
-         self.ReadVarFile(varfile)
-         self.ReadGridFile(gridfile)
-         self.ReadTimeInfo(varfile)
-         nstr = num
-         if self.endianess == 'big':
-             endian = ">"
-         elif self.datatype == 'vtk':
-             endian = ">"
-         else:
-             endian = "<"
- 
-         D = [('NStep', self.NStep), ('SimTime', self.SimTime), ('Dt', self.Dt),
-              ('n1', self.n1), ('n2', self.n2), ('n3', self.n3),
-              ('x1', self.x1), ('x2', self.x2), ('x3', self.x3),
-              ('dx1', self.dx1), ('dx2', self.dx2), ('dx3', self.dx3),
-              ('endianess', self.endianess), ('datatype', self.datatype),
-              ('filetype', self.filetype)]
-         ddict = dict(D)
- 
-         if self.filetype == "single_file":
-             datafilename = self.wdir+"data."+nstr+dataext
-             self.ReadSingleFile(datafilename, self.vars, self.n1, self.n2,
-                                 self.n3, endian, dtype, ddict)
-         elif self.filetype == "multiple_files":
-             self.ReadMultipleFiles(nstr, dataext, self.vars, self.n1, self.n2,
-                                    self.n3, endian, dtype, ddict)
-         else:
-             print "Wrong file type : CHECK pluto.ini for file type."
-             print "Only supported are .dbl, .flt, .vtk, .hdf5"
-             sys.exit()
- 
-         return ddict
+        fh5.close()
+        # else:
+        #    vfp = open(varfile, "r")
+        #    varinfo = vfp.readline().split()
+        #    self.filetype = varinfo[4]
+        #    self.endianess = varinfo[5]
+        #    self.vars = varinfo[6:]
+        #    vfp.close()
+
+    def ReadGridFile(self, gridfile):
+        """ Read grid values from the grid.out file.
+        *Inputs**:    
+          gridfile -- name of the grid.out file which has information about the grid. 
+        """
+
+        xL = []
+        xR = []
+        nmax = []
+        gfp = open(gridfile, "r")
+        for i in gfp.readlines():
+            if len(i.split()) == 1:
+                try:
+                    int(i.split()[0])
+                    nmax.append(int(i.split()[0]))
+                except:
+                    pass
+
+            if len(i.split()) == 3:
+                try:
+                    int(i.split()[0])
+                    xL.append(float(i.split()[1]))
+                    xR.append(float(i.split()[2]))
+                except:
+                    if (i.split()[1] == 'GEOMETRY:'):
+                        self.geometry = i.split()[2]
+                    pass
+
+        self.n1, self.n2, self.n3 = nmax
+        n1 = self.n1
+        n1p2 = self.n1 + self.n2
+        n1p2p3 = self.n1 + self.n2 + self.n3
+        self.x1 = np.asarray([0.5*(xL[i]+xR[i]) for i in range(n1)])
+        self.dx1 = np.asarray([(xR[i]-xL[i]) for i in range(n1)])
+        self.x2 = np.asarray([0.5*(xL[i]+xR[i]) for i in range(n1, n1p2)])
+        self.dx2 = np.asarray([(xR[i]-xL[i]) for i in range(n1, n1p2)])
+        self.x3 = np.asarray([0.5*(xL[i]+xR[i]) for i in range(n1p2, n1p2p3)])
+        self.dx3 = np.asarray([(xR[i]-xL[i]) for i in range(n1p2, n1p2p3)])
+
+        # Stores the total number of points in '_tot' variable in case only
+        # a portion of the domain is loaded. Redefine the x and dx arrays
+        # to match the requested ranges
+        self.n1_tot = self.n1
+        self.n2_tot = self.n2
+        self.n3_tot = self.n3
+        if (self.x1range != None):
+            self.n1_tot = self.n1
+            self.irange = range(
+                abs(self.x1-self.x1range[0]).argmin(), abs(self.x1-self.x1range[1]).argmin()+1)
+            self.n1 = len(self.irange)
+            self.x1 = self.x1[self.irange]
+            self.dx1 = self.dx1[self.irange]
+        else:
+            self.irange = range(self.n1)
+        if (self.x2range != None):
+            self.n2_tot = self.n2
+            self.jrange = range(
+                abs(self.x2-self.x2range[0]).argmin(), abs(self.x2-self.x2range[1]).argmin()+1)
+            self.n2 = len(self.jrange)
+            self.x2 = self.x2[self.jrange]
+            self.dx2 = self.dx2[self.jrange]
+        else:
+            self.jrange = range(self.n2)
+        if (self.x3range != None):
+            self.n3_tot = self.n3
+            self.krange = range(
+                abs(self.x3-self.x3range[0]).argmin(), abs(self.x3-self.x3range[1]).argmin()+1)
+            self.n3 = len(self.krange)
+            self.x3 = self.x3[self.krange]
+            self.dx3 = self.dx3[self.krange]
+        else:
+            self.krange = range(self.n3)
+        self.Slice = (self.x1range != None) or (
+            self.x2range != None) or (self.x3range != None)
+
+        # Create the xr arrays containing the edges positions
+        # Useful for pcolormesh which should use those
+        self.x1r = np.zeros(len(self.x1)+1)
+        self.x1r[1:] = self.x1 + self.dx1/2.0
+        self.x1r[0] = self.x1r[1]-self.dx1[0]
+        self.x2r = np.zeros(len(self.x2)+1)
+        self.x2r[1:] = self.x2 + self.dx2/2.0
+        self.x2r[0] = self.x2r[1]-self.dx2[0]
+        self.x3r = np.zeros(len(self.x3)+1)
+        self.x3r[1:] = self.x3 + self.dx3/2.0
+        self.x3r[0] = self.x3r[1]-self.dx3[0]
+
+        prodn = self.n1*self.n2*self.n3
+        if prodn == self.n1:
+            self.nshp = (self.n1)
+        elif prodn == self.n1*self.n2:
+            self.nshp = (self.n2, self.n1)
+        else:
+            self.nshp = (self.n3, self.n2, self.n1)
+
+    def getGrid(self, fp, dim):
+        x = fp['node_coords'][dim][:]
+        x = x.astype('float64')
+        return x
+
+    def getGridCell(self, fp, dim):
+        x = fp['cell_coords'][dim][:]
+        x = x.astype('float64')
+        return x
+
+    def getVar(self, fp, step, var):
+        returnData = (fp["Timestep_"+str(step)+"/vars"][var][:])
+        return returnData
+
+    def DataScanHDF5(self, fp, myvars):
+        """ Scans HDF5 data files in PLUTO. 
+
+        **Inputs**:
+
+          fp     -- Data file pointer\n
+          myvars -- Names of the variables to read\n
+
+        **Output**:
+
+          Dictionary consisting of variable names as keys and its values. 
+
+        """
+
+        # Read the grid information
+        dim = np.size(fp['cell_coords'].keys())
+
+        x1r = self.getGrid(fp, 'X')
+        x1 = self.getGridCell(fp, 'X')
+        nx = x1.shape[2]
+        dx1 = x1r[1:]-x1r[:-1]
+        x2r = 0
+        x2 = 0
+        dx2 = 0
+        ny = 0
+        x3r = 0
+        x3 = 0
+        dx3 = 0
+        nz = 0
+        dt = 0
+        if(dim > 1):
+            x2r = self.getGrid(fp, 'Y')
+            x2 = self.getGridCell(fp, 'Y')
+            ny = x2.shape[1]
+            dx2 = x2r[1:]-x2r[:-1]
+        if(dim > 2):
+            x3r = self.getGrid(fp, 'Z')
+            x3 = self.getGridCell(fp, 'Z')
+            nz = x3.shape[0]
+            dx3 = x3r[1:]-x3r[:-1]
+
+        NewGridDict = dict([('n1', nx), ('n2', ny), ('n3', nz),
+                            ('x1', x1), ('x2', x2), ('x3', x3),
+                            ('x1r', x1r), ('x2r', x2r), ('x3r', x3r),
+                            ('dx1', dx1), ('dx2', dx2), ('dx3', dx3),
+                            ('Dt', dt)])
+
+        # Variables table
+        nvar = len(myvars)
+        vars = np.zeros((nx, ny, nz, nvar))
+
+        h5vardict = {}
+        print(myvars)
+        for iv in range(nvar):
+            h5vardict[myvars[iv]] = self.getVar(fp, 300, myvars[iv])
+            #h5vardict[myvars[iv]] = vars[:,:,:,iv].squeeze()
+
+        OutDict = dict(NewGridDict)
+        OutDict.update(h5vardict)
+        return OutDict
+
+    def DataScan(self, fp, n1, n2, n3, endian, dtype, off=None):
+        """ Scans the data files in all formats. 
+
+        **Inputs**:
+
+          fp -- Data file pointer\n
+          n1 -- No. of points in X1 direction\n
+          n2 -- No. of points in X2 direction\n
+          n3 -- No. of points in X3 direction\n
+          endian -- Endianess of the data\n
+          dtype -- datatype, eg : double, float, vtk, hdf5\n
+          off -- offset (for avoiding staggered B fields) 
+
+        **Output**:
+
+          Dictionary consisting of variable names as keys and its values. 
+
+        """
+
+        if off is not None:
+            off_fmt = endian+str(off)+dtype
+            nboff = np.dtype(off_fmt).itemsize
+            fp.read(nboff)
+
+        n1_tot = self.n1_tot
+        n2_tot = self.n2_tot
+        n3_tot = self.n3_tot
+
+        A = array.array(dtype)
+        fmt = endian+str(n1_tot*n2_tot*n3_tot)+dtype
+        nb = np.dtype(fmt).itemsize
+        A.fromstring(fp.read(nb))
+
+        if (self.Slice):
+            darr = np.zeros((n1*n2*n3))
+            indxx = np.sort([n3_tot*n2_tot*k + j*n2_tot +
+                            i for i in self.irange for j in self.jrange for k in self.krange])
+            if (sys.byteorder != self.endianess):
+                A.byteswap()
+            for ii, iii in enumerate(indxx):
+                darr[ii] = A[iii]
+            darr = [darr]
+        else:
+            darr = np.frombuffer(A, dtype=np.dtype(fmt))
+
+        return np.reshape(darr[0], self.nshp).transpose()
+
+    def ReadSingleFile(self, datafilename, myvars, n1, n2, n3, endian, dtype, ddict):
+        """Reads a single data file, data.****.dtype.
+
+        **Inputs**: 
+
+          datafilename -- Data file name\n
+          myvars -- List of variable names to be read\n
+          n1 -- No. of points in X1 direction\n
+          n2 -- No. of points in X2 direction\n
+          n3 -- No. of points in X3 direction\n
+          endian -- Endianess of the data\n
+          dtype -- datatype\n
+          ddict -- Dictionary containing Grid and Time Information
+          which is updated
+
+        **Output**:
+
+          Updated Dictionary consisting of variable names as keys and its values.
+        """
+        # if self.datatype == 'hdf5':
+        fp = h5.File(datafilename, 'r')
+        # else:
+        #    fp = open(datafilename, "rb")
+
+        print("Reading Data file : %s" % datafilename)
+
+#        if self.datatype == 'vtk':
+#            vtkd = self.DataScanVTK(fp, n1, n2, n3, endian, dtype)
+#            ddict.update(vtkd)
+#        elif self.datatype == 'hdf5':
+#            h5d = self.DataScanHDF5(fp,myvars,self.level)
+#            ddict.update(h5d)
+#        elif self.datatype == 'dbl.h5':
+        h5d = self.DataScanHDF5(fp, myvars)
+        ddict.update(h5d)
+#        else:
+#            for i in range(len(myvars)):
+#                if myvars[i] == 'bx1s':
+#                    ddict.update({myvars[i]: self.DataScan(fp, n1, n2, n3, endian,
+#                                                           dtype, off=n2*n3)})
+#                elif myvars[i] == 'bx2s':
+#                    ddict.update({myvars[i]: self.DataScan(fp, n1, n2, n3, endian,
+#                                                           dtype, off=n3*n1)})
+#                elif myvars[i] == 'bx3s':
+#                    ddict.update({myvars[i]: self.DataScan(fp, n1, n2, n3, endian,
+#                                                           dtype, off=n1*n2)})
+#                else:
+#                    ddict.update({myvars[i]: self.DataScan(fp, n1, n2, n3, endian,
+#                                                           dtype)})
+
+        fp.close()
+
+    def ReadMultipleFiles(self, nstr, dataext, myvars, n1, n2, n3, endian,
+                          dtype, ddict):
+        """Reads a  multiple data files, varname.****.dataext.
+
+        **Inputs**:
+
+          nstr -- File number in form of a string\n
+          dataext -- Data type of the file, e.g., 'dbl', 'flt' or 'vtk' \n
+          myvars -- List of variable names to be read\n
+          n1 -- No. of points in X1 direction\n
+          n2 -- No. of points in X2 direction\n
+          n3 -- No. of points in X3 direction\n
+          endian -- Endianess of the data\n
+          dtype -- datatype\n
+          ddict -- Dictionary containing Grid and Time Information
+          which is updated.
+
+        **Output**:
+
+          Updated Dictionary consisting of variable names as keys and its values.
+
+        """
+        for i in range(len(myvars)):
+            datafilename = self.wdir+myvars[i]+"."+nstr+dataext
+            fp = open(datafilename, "rb")
+            if self.datatype == 'vtk':
+                ddict.update(self.DataScanVTK(fp, n1, n2, n3, endian, dtype))
+            else:
+                ddict.update({myvars[i]: self.DataScan(fp, n1, n2, n3, endian,
+                                                       dtype)})
+            fp.close()
+
+    def ReadDataFile(self, num):
+        """Reads the data file generated from PLUTO code.
+
+        **Inputs**:
+
+        num -- Data file number in form of an Integer.
+
+        **Outputs**:
+
+        Dictionary that contains all information about Grid, Time and 
+        variables.
+
+        """
+        gridfile = self.wdir+"grid.out"
+        # if self.datatype == "float":
+        #    dtype = "f"
+        #    varfile = self.wdir+"flt.out"
+        #    dataext = ".flt"
+        # elif self.datatype == "vtk":
+        #    dtype = "f"
+        #    varfile = self.wdir+"vtk.out"
+        #    dataext=".vtk"
+        # elif self.datatype == 'hdf5':
+        #    dtype = 'd'
+        #    dataext = '.hdf5'
+        #    nstr = num
+        #    varfile = self.wdir+"data."+nstr+dataext
+        # elif self.datatype == 'h5':
+        dtype = 'd'
+        dataext = '.dbl.h5'
+        nstr = num
+        varfile = self.wdir+"data."+nstr+dataext
+        # else:
+        #    dtype = "d"
+        #    varfile = self.wdir+"dbl.out"
+        #    dataext = ".dbl"
+
+        self.ReadVarFile(varfile)
+        self.ReadGridFile(gridfile)
+        self.ReadTimeInfo(varfile)
+        nstr = num
+        if self.endianess == 'big':
+            endian = ">"
+        elif self.datatype == 'vtk':
+            endian = ">"
+        else:
+            endian = "<"
+
+        D = [('NStep', self.NStep), ('SimTime', self.SimTime), ('Dt', self.Dt),
+             ('n1', self.n1), ('n2', self.n2), ('n3', self.n3),
+             ('x1', self.x1), ('x2', self.x2), ('x3', self.x3),
+             ('dx1', self.dx1), ('dx2', self.dx2), ('dx3', self.dx3),
+             ('endianess', self.endianess), ('datatype', self.datatype),
+             ('filetype', self.filetype)]
+        ddict = dict(D)
+
+        if self.filetype == "single_file":
+            datafilename = self.wdir+"data."+nstr+dataext
+            self.ReadSingleFile(datafilename, self.vars, self.n1, self.n2,
+                                self.n3, endian, dtype, ddict)
+        elif self.filetype == "multiple_files":
+            self.ReadMultipleFiles(nstr, dataext, self.vars, self.n1, self.n2,
+                                   self.n3, endian, dtype, ddict)
+        else:
+            print("Wrong file type : CHECK pluto.ini for file type.")
+            print("Only supported are .dbl, .flt, .vtk, .hdf5")
+            sys.exit()
+
+        return ddict
 
 # -------------------------------------------------------------------
 # building mesh arrays for theta, r, phi (x, y, z)
 # -------------------------------------------------------------------
+
+
 class Mesh():
     # based on P. Benitez Llambay routine
     """
     Mesh class, keeps all mesh data.
     Input: directory [string] -> place where domain files are
     """
+
     def __init__(self, directory=""):
         if len(directory) > 1:
             if directory[-1] != '/':
@@ -562,13 +590,16 @@ class Mesh():
         # adopted in the PLUTO simulation
 
         try:
-            domain_rad = np.loadtxt(fname=directory+"grid.out",skiprows=11,usecols=1,max_rows=self.nrad)  # radial interfaces of grid cells
-            domain_rad = np.append(domain_rad,100.)
+            # radial interfaces of grid cells
+            domain_rad = np.loadtxt(
+                fname=directory+"grid.out", skiprows=11, usecols=1, max_rows=self.nrad)
+            domain_rad = np.append(domain_rad, 100.)
         except IOError:
             print('IOError')
 
         self.redge = domain_rad                              # r-edge
-        self.rmed = 2.0*(domain_rad[1:]*domain_rad[1:]*domain_rad[1:] - domain_rad[:-1]*domain_rad[:-1]*domain_rad[:-1]) / (domain_rad[1:]*domain_rad[1:] - domain_rad[:-1]*domain_rad[:-1]) / 3.0  # r-center
+        self.rmed = 2.0*(domain_rad[1:]*domain_rad[1:]*domain_rad[1:] - domain_rad[:-1]*domain_rad[:-1] *
+                         domain_rad[:-1]) / (domain_rad[1:]*domain_rad[1:] - domain_rad[:-1]*domain_rad[:-1]) / 3.0  # r-center
 
         # -----
         # colatitude
@@ -582,26 +613,27 @@ class Mesh():
         # zmax_over_H = z_max_grid / pressure scale height, value set in params.dat
 
         try:
-            domain_th = np.loadtxt(fname=directory+"grid.out",skiprows=10+1+self.nrad+1,usecols=1,max_rows=self.ncol)  # radial interfaces of grid cells
+            domain_th = np.loadtxt(fname=directory+"grid.out", skiprows=10+1+self.nrad+1,
+                                   usecols=1, max_rows=self.ncol)  # radial interfaces of grid cells
         except IOError:
             print('IOError')
 
         self.tedge = domain_th                    # colatitude of cell faces
-        self.tmed = 0.5*(domain_th[:-1] + domain_th[1:]) # colatitude of cell centers
+        # colatitude of cell centers
+        self.tmed = 0.5*(domain_th[:-1] + domain_th[1:])
 
         # define number of cells in vertical direction for arrays in
         # cylindrical coordinates
         self.nver = 200  # seems large enough
         # define an array for vertical altitude across the midplane
         zbuf = -self.rmed.max()*np.cos(self.tmed)
-        self.zmed = np.linspace(zbuf.min(),zbuf.max(),self.nver)
-
+        self.zmed = np.linspace(zbuf.min(), zbuf.max(), self.nver)
 
         # -----
         # azimuth
         # -----
-        self.pedge = np.linspace(0.,2.*np.pi,self.nsec+1)  # phi-edge
-        self.pmed = 0.5*(self.pedge[:-1] + self.pedge[1:]) # phi-center
+        self.pedge = np.linspace(0., 2.*np.pi, self.nsec+1)  # phi-edge
+        self.pmed = 0.5*(self.pedge[:-1] + self.pedge[1:])  # phi-center
 
 
 # -------------------------------------------------------------------
@@ -620,12 +652,13 @@ class Field(Mesh):
            dtype='float64' (numpy dtype) -> 'float64', 'float32',
                                              depends if FARGO_OPT+=-DFLOAT is activated
     """
+
     def __init__(self, field, staggered='c', directory='', dtype='float64'):
         if len(directory) > 1:
             if directory[-1] != '/':
                 directory += '/'
 
-        D = pload(ns=300,w_dir=directory)
+        D = pload(ns=300, w_dir=directory)
 
         nrad = np.shape(D.rho)[2]
         ncol = np.shape(D.rho)[1]
@@ -635,7 +668,8 @@ class Field(Mesh):
         nsec = int(nsec)
         self.nrad = nrad
         self.nsec = nsec
-        self.ncol = ncol                  # colatitude (ncol is a global variable)
+        # colatitude (ncol is a global variable)
+        self.ncol = ncol
 
         Mesh.__init__(self, directory)    # all Mesh attributes inside Field
 
@@ -648,7 +682,7 @@ class Field(Mesh):
             buf = subprocess.getoutput(command)
         num = buf.split()[2]
         ulen = num.split('*')[0][1:]
-        self.culength = float(ulen)*1.5e11  #from au to meters
+        self.culength = float(ulen)*1.5e11  # from au to meters
         command = 'awk " /^#define  UNIT_DENSITY/ " '+directory+'definitions.h'
         # check which version of python we're using
         if sys.version_info[0] < 3:   # python 2.X
@@ -657,7 +691,7 @@ class Field(Mesh):
             buf = subprocess.getoutput(command)
         num = buf.split()[2]
         ulen = num.split('*')[0][1:]
-        self.cumass = float(ulen)*2e30  #from Msol to kg
+        self.cumass = float(ulen)*2e30  # from Msol to kg
         # unit of temperature = mean molecular weight * 8.0841643e-15 * M / L;
         self.cutemp = 2.35 * 8.0841643e-15 * self.cumass / self.culength
 
@@ -667,34 +701,36 @@ class Field(Mesh):
             # Deduce new units of time and temperature:
             # T = sqrt( pow(L,3.) / 6.673e-11 / M )
             # U = mmw * 8.0841643e-15 * M / L;
-            self.cutime = np.sqrt( self.culength**3 / 6.673e-11 / self.cumass)
+            self.cutime = np.sqrt(self.culength**3 / 6.673e-11 / self.cumass)
             self.cutemp = 2.35 * 8.0841643e-15 * self.cumass / self.culength
             print('### NEW UNITS SPECIFIED: ###')
-            print('new unit of length [m] = ',self.culength)
-            print('new unit of mass [kg]  = ',self.cumass)
-            print('new unit of time [s] = ',self.cutime)
-            print('new unit of temperature [K] = ',self.cutemp)
+            print('new unit of length [m] = ', self.culength)
+            print('new unit of mass [kg]  = ', self.cumass)
+            print('new unit of time [s] = ', self.cutime)
+            print('new unit of temperature [K] = ', self.cutemp)
 
         # now, staggering:
-        if staggered.count('r')>0:
-            self.r = self.redge[:-1] # do not dump last element
+        if staggered.count('r') > 0:
+            self.r = self.redge[:-1]  # do not dump last element
         else:
             self.r = self.rmed
 
-        self.data = D.rho # scalar data is here.
+        self.data = D.rho  # scalar data is here.
 
     def __open_field(self, f, var, dtype):
         """
         Reading the data
         """
         datafilename = f+'data.0300.dbl.h5'
-        fp = h5.File(datafilename,'r')
+        fp = h5.File(datafilename, 'r')
         field = self.getVar(fp, 300, var)
-        return field.reshape(self.nrad,self.nsec) # 2D
+        return field.reshape(self.nrad, self.nsec)  # 2D
 
 # -------------------------------------------------------------------
 # reading particles
 # -------------------------------------------------------------------
+
+
 class Particles():
     # G. Picogna
     """
@@ -703,93 +739,98 @@ class Particles():
     Input: ns='' [int] -> output number 
            directory='' [string] -> where filename is
     """
+
     def __init__(self, ns, directory=''):
 
-         def NStepStr(ns):
-             nsstr = str(ns)
-             while len(nsstr) < 4:
-                 nsstr = '0'+nsstr
-             return nsstr
+        def NStepStr(ns):
+            nsstr = str(ns)
+            while len(nsstr) < 4:
+                nsstr = '0'+nsstr
+            return nsstr
 
-         if len(directory) > 1:
-             if directory[-1] != '/':
-                 directory += '/'
+        if len(directory) > 1:
+            if directory[-1] != '/':
+                directory += '/'
 
-         nstepstr = NStepStr(ns)
-         fname = directory+"part_data."+nstepstr+".dbl"
-         fdata = open(fname,"rb")
-         fmt1 = "<"+"i"
-         fmt2 = "<"+"d"
+        nstepstr = NStepStr(ns)
+        fname = directory+"part_data."+nstepstr+".dbl"
+        fdata = open(fname, "rb")
+        fmt1 = "<"+"i"
+        fmt2 = "<"+"d"
 
-         nb1 = struct.calcsize(fmt1)
-         nb2 = struct.calcsize(fmt2)
+        nb1 = struct.calcsize(fmt1)
+        nb2 = struct.calcsize(fmt2)
 
-         NOP = struct.unpack(fmt1, fdata.read(nb1))[0]
-         NDIM = 3 # hard coded. 
-         P_Step = struct.unpack(fmt1, fdata.read(nb1))[0]
-         P_Time = struct.unpack(fmt2, fdata.read(nb2))[0]
+        NOP = struct.unpack(fmt1, fdata.read(nb1))[0]
+        NDIM = 3  # hard coded.
+        P_Step = struct.unpack(fmt1, fdata.read(nb1))[0]
+        P_Time = struct.unpack(fmt2, fdata.read(nb2))[0]
 
-         dtype = np.dtype([
-             ("pid", np.int32),
-             ("pcell_x", np.int32),
-             ("pcell_y", np.int32),
-             ("pcell_z", np.int32),
-             ("pos_x", np.float64),
-             ("pos_y", np.float64),
-             ("pos_z", np.float64),
-             ("vel_x", np.float64),
-             ("vel_y", np.float64),
-             ("vel_z", np.float64),
-             ("tstop", np.float64),
-             #("radius", np.float64),
-             ])
+        dtype = np.dtype([
+            ("pid", np.int32),
+            ("pcell_x", np.int32),
+            ("pcell_y", np.int32),
+            ("pcell_z", np.int32),
+            ("pos_x", np.float64),
+            ("pos_y", np.float64),
+            ("pos_z", np.float64),
+            ("vel_x", np.float64),
+            ("vel_y", np.float64),
+            ("vel_z", np.float64),
+            ("tstop", np.float64),
+            #("radius", np.float64),
+        ])
 
-         P_DataDict = np.fromfile(fdata,dtype=dtype)
-         fdata.close()
+        P_DataDict = np.fromfile(fdata, dtype=dtype)
+        fdata.close()
 
-         sorter = P_DataDict['pid'].argsort()
-         DataDict = P_DataDict[sorter]
+        sorter = P_DataDict['pid'].argsort()
+        DataDict = P_DataDict[sorter]
 
-         particles_radius = np.array([0.0001,0.001,0.01,0.1,0.3,1.,3.,10.,100.,1000.])
+        particles_radius = np.array(
+            [0.0001, 0.001, 0.01, 0.1, 0.3, 1., 3., 10., 100., 1000.])
 
-         self.NOP = NOP
-         self.P_Time = P_Time
-         self.P_Step = P_Step
-         self.pid = DataDict['pid']
-         self.pcell_x = DataDict['pcell_x']
-         self.pcell_y = DataDict['pcell_y']
-         self.pcell_z = DataDict['pcell_z']
-         self.pos_x = DataDict['pos_x']
-         self.pos_y = DataDict['pos_y']
-         self.pos_z = DataDict['pos_z']
-         self.vel_x = DataDict['vel_x']
-         self.vel_y = DataDict['vel_y']
-         self.vel_z = DataDict['vel_z']
-         self.tstop = DataDict['tstop']
-         self.radius = [particles_radius[i] for j in range(100000) for i in range (10)]
+        self.NOP = NOP
+        self.P_Time = P_Time
+        self.P_Step = P_Step
+        self.pid = DataDict['pid']
+        self.pcell_x = DataDict['pcell_x']
+        self.pcell_y = DataDict['pcell_y']
+        self.pcell_z = DataDict['pcell_z']
+        self.pos_x = DataDict['pos_x']
+        self.pos_y = DataDict['pos_y']
+        self.pos_z = DataDict['pos_z']
+        self.vel_x = DataDict['vel_x']
+        self.vel_y = DataDict['vel_y']
+        self.vel_z = DataDict['vel_z']
+        self.tstop = DataDict['tstop']
+        self.radius = [particles_radius[i]
+                       for j in range(100000) for i in range(10)]
 
 # ---------------------
 # define RT model class
 # ---------------------
+
+
 class RTmodel():
-    def __init__(self, distance = 140, label='', npix=256, Lambda=800,
+    def __init__(self, distance=140, label='', npix=256, Lambda=800,
                  incl=30.0, posang=0.0, phi=0.0,
-                 line = '12co', imolspec=1, iline=3, linenlam=80, vkms=0, widthkms=4,):
+                 line='12co', imolspec=1, iline=3, linenlam=80, vkms=0, widthkms=4,):
 
         # disk parameters
         self.distance = distance * pc
         self.label = label
         # RT pars
         self.Lambda = Lambda
-        self.line   = gasspecies
-        self.npix   = npix
-        self.incl   = incl
+        self.line = gasspecies
+        self.npix = npix
+        self.incl = incl
         self.posang = posang
         self.phi = float(phi)
         # line emission pars
         self.imolspec = imolspec
-        self.iline    = iline
-        self.vkms     = vkms
+        self.iline = iline
+        self.vkms = vkms
         self.widthkms = widthkms
         self.linenlam = linenlam
 
@@ -801,29 +842,34 @@ def write_radmc3d_script():
 
     # RT in the dust continuum
     if RTdust_or_gas == 'dust':
-        command ='radmc3d image lambda '+str(wavelength*1e3)+' npix '+str(nbpixels)+' incl '+str(inclination)+' posang '+str(posangle+90.0)+' phi '+str(phiangle)
+        command = 'radmc3d image lambda '+str(wavelength*1e3)+' npix '+str(
+            nbpixels)+' incl '+str(inclination)+' posang '+str(posangle+90.0)+' phi '+str(phiangle)
         if plot_tau == 'Yes':
-            command ='radmc3d image tracetau lambda '+str(wavelength*1e3)+' npix '+str(nbpixels)+' incl '+str(inclination)+' posang '+str(posangle+90.0)+' phi '+str(phiangle)
+            command = 'radmc3d image tracetau lambda '+str(wavelength*1e3)+' npix '+str(
+                nbpixels)+' incl '+str(inclination)+' posang '+str(posangle+90.0)+' phi '+str(phiangle)
         if polarized_scat == 'Yes':
-            command=command+' stokes'
+            command = command+' stokes'
 
     # RT in gas lines
     if RTdust_or_gas == 'gas':
         if widthkms == 0.0:
-            command='radmc3d image iline '+str(iline)+' vkms '+str(vkms)+' npix '+str(nbpixels)+' incl '+str(inclination)+' posang '+str(posangle+90.0)+' phi '+str(phiangle)
+            command = 'radmc3d image iline '+str(iline)+' vkms '+str(vkms)+' npix '+str(
+                nbpixels)+' incl '+str(inclination)+' posang '+str(posangle+90.0)+' phi '+str(phiangle)
         else:
-            command='radmc3d image iline '+str(iline)+' widthkms '+str(widthkms)+' linenlam '+str(linenlam)+' npix '+str(nbpixels)+' incl '+str(inclination)+' posang '+str(posangle+90.0)+' phi '+str(phiangle)
+            command = 'radmc3d image iline '+str(iline)+' widthkms '+str(widthkms)+' linenlam '+str(linenlam)+' npix '+str(
+                nbpixels)+' incl '+str(inclination)+' posang '+str(posangle+90.0)+' phi '+str(phiangle)
             if plot_tau == 'Yes':
-                command='radmc3d image tracetau iline '+str(iline)+' widthkms '+str(widthkms)+' linenlam '+str(linenlam)+' npix '+str(nbpixels)+' incl '+str(inclination)+' posang '+str(posangle+90.0)+' phi '+str(phiangle)
+                command = 'radmc3d image tracetau iline '+str(iline)+' widthkms '+str(widthkms)+' linenlam '+str(
+                    linenlam)+' npix '+str(nbpixels)+' incl '+str(inclination)+' posang '+str(posangle+90.0)+' phi '+str(phiangle)
                 #command='radmc3d tausurf 1.0 iline '+str(iline)+' widthkms '+str(widthkms)+' linenlam '+str(linenlam)+' npix '+str(nbpixels)+' incl '+str(inclination)+' posang '+str(posangle+90.0)+' phi '+str(phiangle)
 
     # optional: second-order ray tracing
     if secondorder == 'Yes':
-        command=command+' secondorder'
+        command = command+' secondorder'
 
     # write execution script
     print(command)
-    SCRIPT = open('script_radmc','w')
+    SCRIPT = open('script_radmc', 'w')
     if Tdust_eq_Thydro == 'No':
         SCRIPT.write('radmc3d mctherm; '+command)
     else:
@@ -845,15 +891,19 @@ def exportfits(M):
             image = 'image_'
         if RTdust_or_gas == 'gas':
             # no need for lambda in file's name for gas RT calculations...
-            outfile = image+str(M.label)+'_i'+str(inclination)+'_phi'+str(M.phi)+'_PA'+str(posangle)
+            outfile = image+str(M.label)+'_i'+str(inclination) + \
+                '_phi'+str(M.phi)+'_PA'+str(posangle)
         if RTdust_or_gas == 'dust':
-            outfile = image+str(M.label)+'_lbda'+str(wavelength)+'_i'+str(inclination)+'_phi'+str(M.phi)+'_PA'+str(posangle)
+            outfile = image+str(M.label)+'_lbda'+str(wavelength)+'_i' + \
+                str(inclination)+'_phi'+str(M.phi)+'_PA'+str(posangle)
     else:
         if RTdust_or_gas == 'gas':
             # no need for lambda in file's name for gas RT calculations...
-            outfile = 'tau_'+str(M.label)+'_i'+str(inclination)+'_phi'+str(M.phi)+'_PA'+str(posangle)
+            outfile = 'tau_'+str(M.label)+'_i'+str(inclination) + \
+                '_phi'+str(M.phi)+'_PA'+str(posangle)
         if RTdust_or_gas == 'dust':
-            outfile = 'tau_'+str(M.label)+'_lbda'+str(wavelength)+'_i'+str(inclination)+'_phi'+str(M.phi)+'_PA'+str(posangle)
+            outfile = 'tau_'+str(M.label)+'_lbda'+str(wavelength)+'_i' + \
+                str(inclination)+'_phi'+str(M.phi)+'_PA'+str(posangle)
     if secondorder == 'Yes':
         outfile = outfile+'_so'
 
@@ -861,22 +911,22 @@ def exportfits(M):
         outfileall = outfile+'_wn'+str(noise_dev_std)+'_all.fits'
     else:
         outfileall = outfile+'_all.fits'
-    outfile    = outfile+'.fits'
+    outfile = outfile+'.fits'
 
-    LOG = open('fluxlog.txt','a')
+    LOG = open('fluxlog.txt', 'a')
     LOG.write(outfile+"\n")
 
     # input file produced by radmc3D
     infile = 'image.out'
     # read header info:
-    f = open(infile,'r')
+    f = open(infile, 'r')
     iformat = int(f.readline())
     # nb of pixels
-    im_nx, im_ny = tuple(np.array(f.readline().split(),dtype=int))
+    im_nx, im_ny = tuple(np.array(f.readline().split(), dtype=int))
     # nb of wavelengths, can be different from one for multi-color images of gas emission
     nlam = int(f.readline())
     # pixel size in each direction in cm
-    pixsize_x, pixsize_y = tuple(np.array(f.readline().split(),dtype=float))
+    pixsize_x, pixsize_y = tuple(np.array(f.readline().split(), dtype=float))
     # read wavelength in microns
     lbda = np.zeros(nlam)
     for i in range(nlam):
@@ -884,7 +934,7 @@ def exportfits(M):
     # convert lbda in velocity (km/s)
     if nlam > 1:
         lbda0 = lbda[nlam//2]  # implicitly gas RT
-        vel_range = c * 1e-5 *(lbda-lbda0)/lbda0 # in km/s (c is in cm/s!)
+        vel_range = c * 1e-5 * (lbda-lbda0)/lbda0  # in km/s (c is in cm/s!)
         print('range of wavelengths = ', lbda)
         print('range of velocities = ', vel_range)
         dv = vel_range[1]-vel_range[0]
@@ -892,7 +942,7 @@ def exportfits(M):
         if RTdust_or_gas == 'gas':
             lbda0 = lbda[0]
         else:
-            lbda0 = wavelength*1e3 # in microns
+            lbda0 = wavelength*1e3  # in microns
     f.readline()               # empty line
 
     # calculate physical scales
@@ -906,12 +956,12 @@ def exportfits(M):
     # 1 Jansky converted in cgs x pixel surface in cm^2 (same
     # conversion whether RT in dust or gas lines)
     fluxfactor = 1.e23 * pixsurf_ster
-    print('fluxfactor = ',fluxfactor)
+    print('fluxfactor = ', fluxfactor)
 
     # beam area in pixel^2
     mycdelt = pixsize_x/(M.distance/pc)/au
-    beam =  (np.pi/(4.*np.log(2.)))*bmaj*bmin/(mycdelt**2.)
-    print('beam = ',beam)
+    beam = (np.pi/(4.*np.log(2.)))*bmaj*bmin/(mycdelt**2.)
+    print('beam = ', beam)
     # stdev lengths in pixel
     stdev_x = (bmaj/(2.*np.sqrt(2.*np.log(2.)))) / mycdelt
     stdev_y = (bmin/(2.*np.sqrt(2.*np.log(2.)))) / mycdelt
@@ -922,40 +972,46 @@ def exportfits(M):
     if polarized_scat == 'No':
         if nlam == 1:  # dust continuum RT calculations (implicitly)
             images = np.loadtxt(infile, skiprows=6)
-            im = images.reshape(im_ny,im_nx)
+            im = images.reshape(im_ny, im_nx)
             naxis = 2
         if nlam > 1:   # gas RT calculations (implicitly)
-            intensity_in_each_channel = np.zeros((nlam,im_ny,im_nx))
-            moment0 = np.zeros((im_ny,im_nx))
-            moment1 = np.zeros((im_ny,im_nx))
+            intensity_in_each_channel = np.zeros((nlam, im_ny, im_nx))
+            moment0 = np.zeros((im_ny, im_nx))
+            moment1 = np.zeros((im_ny, im_nx))
             naxis = 2
             images = np.loadtxt(infile, skiprows=5+nlam)
             for i in range(nlam):
                 im_v = images[i*im_ny*im_nx:(i+1)*im_ny*im_nx]
-                im = im_v.reshape(im_ny,im_nx)
+                im = im_v.reshape(im_ny, im_nx)
                 # sometimes the intensity has a value at the origin
                 # that is unrealistically large, in particular when
                 # the velocity relative to the systemic one is
                 # large. We put the specific intensity to zero at the
                 # origin, as it should be in our disc model!
-                im[im_ny//2,im_nx//2] = 0.0
+                im[im_ny//2, im_nx//2] = 0.0
                 # ---
                 if (add_noise == 'Yes'):
                     # noise standard deviation in Jy per pixel
-                    noise_dev_std_Jy_per_pixel = (noise_dev_std/fluxfactor) / np.sqrt(0.5*beam)  # 1D
-                    if i==0:
-                        print('noise_dev_std_Jy_per_pixel = ',noise_dev_std_Jy_per_pixel)
+                    noise_dev_std_Jy_per_pixel = (
+                        noise_dev_std/fluxfactor) / np.sqrt(0.5*beam)  # 1D
+                    if i == 0:
+                        print('noise_dev_std_Jy_per_pixel = ',
+                              noise_dev_std_Jy_per_pixel)
                     # noise array
-                    noise_array = np.random.normal(0.0,noise_dev_std_Jy_per_pixel,size=im_ny*im_nx)
-                    noise_array = noise_array.reshape(im_ny,im_nx)
+                    noise_array = np.random.normal(
+                        0.0, noise_dev_std_Jy_per_pixel, size=im_ny*im_nx)
+                    noise_array = noise_array.reshape(im_ny, im_nx)
                     im += noise_array
                 # ---
                 # keep track of beam-convolved specific intensity in each channel map
                 if plot_tau == 'No':
-                    smooth = Gauss_filter(im, stdev_x, stdev_y, bpaangle, Plot=False) + 1e-20  # avoid division by zeros w/o noise...
-                    intensity_in_each_channel[i,:,:] = smooth
+                    # avoid division by zeros w/o noise...
+                    smooth = Gauss_filter(
+                        im, stdev_x, stdev_y, bpaangle, Plot=False) + 1e-20
+                    intensity_in_each_channel[i, :, :] = smooth
                 else:
-                    intensity_in_each_channel[i,:,:] = im  # in this case im contains the optical depth (non convolved)
+                    # in this case im contains the optical depth (non convolved)
+                    intensity_in_each_channel[i, :, :] = im
                 # ---
                 if moment_order == 0:
                     moment0 += im*dv  # non convolved (done afterwards)
@@ -972,12 +1028,14 @@ def exportfits(M):
                     '''
                     moment1 += smooth*vel_range[i]*dv
                 if moment_order > 1:
-                    sys.exit('moment map of order > 1 not implemented yet, I must exit!')
+                    sys.exit(
+                        'moment map of order > 1 not implemented yet, I must exit!')
             # end loop over wavelengths
             if moment_order == 0:
                 im = moment0   # non-convolved quantity
             if moment_order == 1:
-                im = moment1/moment0 # ratio of two beam-convolved quantities (convolution not redone afterwards)
+                # ratio of two beam-convolved quantities (convolution not redone afterwards)
+                im = moment1/moment0
                 if add_noise == 'Yes':
                     '''
                     buf = moment0*fluxfactor*beam   # moment 0 in Jy/beam
@@ -993,16 +1051,17 @@ def exportfits(M):
     if RTdust_or_gas == 'dust' and polarized_scat == 'Yes':
         naxis = 3
         images = np.zeros((5*im_ny*im_nx))
-        im = images.reshape(5,im_ny,im_nx)
+        im = images.reshape(5, im_ny, im_nx)
         for j in range(im_ny):
             for i in range(im_nx):
                 line = f.readline()
                 dat = line.split()
-                im[0,j,i] = float(dat[0]) # I
-                im[1,j,i] = float(dat[1]) # Q
-                im[2,j,i] = float(dat[2]) # U
-                im[3,j,i] = float(dat[3]) # V
-                im[4,j,i] = math.sqrt(float(dat[1])**2.0+float(dat[2])**2.0) # P
+                im[0, j, i] = float(dat[0])  # I
+                im[1, j, i] = float(dat[1])  # Q
+                im[2, j, i] = float(dat[2])  # U
+                im[3, j, i] = float(dat[3])  # V
+                im[4, j, i] = math.sqrt(
+                    float(dat[1])**2.0+float(dat[2])**2.0)  # P
                 if (j == im_ny-1) and (i == im_nx-1):
                     f.readline()     # empty line
 
@@ -1012,10 +1071,10 @@ def exportfits(M):
     # Fits header
     hdu = fits.PrimaryHDU()
     hdu.header['BITPIX'] = -32
-    hdu.header['NAXIS'] = 2 # naxis
+    hdu.header['NAXIS'] = 2  # naxis
     hdu.header['NAXIS1'] = im_nx
     hdu.header['NAXIS2'] = im_ny
-    hdu.header['EPOCH']  = 2000.0
+    hdu.header['EPOCH'] = 2000.0
     hdu.header['EQUINOX'] = 2000.0
     hdu.header['LONPOLE'] = 180.0
     hdu.header['CTYPE1'] = 'RA---SIN'
@@ -1036,7 +1095,7 @@ def exportfits(M):
     del hdu.header['EXTEND']
 
     # keep track of all parameters in params.dat file
-    #for i in range(len(lines_params)):
+    # for i in range(len(lines_params)):
     #    hdu.header[var[i]] = par[i]
     LOG.write('pixsize '+str(pixsize_x_deg*3600.)+"\n")
 
@@ -1057,11 +1116,11 @@ def exportfits(M):
     if polarized_scat == 'No' and nlam > 1:
         hdu2 = fits.PrimaryHDU()
         hdu2.header['BITPIX'] = -32
-        hdu2.header['NAXIS'] = 3 # naxis
+        hdu2.header['NAXIS'] = 3  # naxis
         hdu2.header['NAXIS1'] = im_nx
         hdu2.header['NAXIS2'] = im_ny
         hdu2.header['NAXIS3'] = nlam
-        hdu2.header['EPOCH']  = 2000.0
+        hdu2.header['EPOCH'] = 2000.0
         hdu2.header['EQUINOX'] = 2000.0
         hdu2.header['LONPOLE'] = 180.0
         hdu2.header['CTYPE1'] = 'RA---SIN'
@@ -1094,6 +1153,8 @@ def exportfits(M):
 # --------------------------------------------------
 # function return kernel for convolution by an elliptical beam
 # --------------------------------------------------
+
+
 def Gauss_filter(img, stdev_x, stdev_y, PA, Plot=False):
     '''
     img: image array
@@ -1114,7 +1175,7 @@ def Gauss_filter(img, stdev_x, stdev_y, PA, Plot=False):
 
     x = np.arange(nx)+1
     y = np.arange(ny)+1
-    X, Y = np.meshgrid(x,y)
+    X, Y = np.meshgrid(x, y)
     X0 = np.floor(nx//2)+1
     Y0 = np.floor(ny//2)+1
 
@@ -1129,7 +1190,7 @@ def Gauss_filter(img, stdev_x, stdev_y, PA, Plot=False):
     Z = A*np.exp(-(a*(X-X0)**2-2*b*(X-X0)*(Y-Y0)+c*(Y-Y0)**2))
     Z /= np.sum(Z)
 
-    if Plot==True:
+    if Plot == True:
         import matplotlib.pyplot as plt
         import matplotlib.cm as cm
         plt.imshow(Z, cmap=cm.jet)
@@ -1137,7 +1198,7 @@ def Gauss_filter(img, stdev_x, stdev_y, PA, Plot=False):
 
     result = convolve_fft(data, Z, boundary='fill', fill_value=0.0)
 
-    if Plot==True:
+    if Plot == True:
         plt.imshow(result, cmap=cm.magma)
         plt.show()
 
@@ -1147,14 +1208,14 @@ def Gauss_filter(img, stdev_x, stdev_y, PA, Plot=False):
 # -------------------------------------------------------------------
 # writing dustopac
 # -------------------------------------------------------------------
-def write_dustopac(species=['ac_opct', 'Draine_Si'],nbin=20):
+def write_dustopac(species=['ac_opct', 'Draine_Si'], nbin=20):
     print('writing dustopac.inp')
     hline = "-----------------------------------------------------------------------------\n"
-    OPACOUT = open('dustopac.inp','w')
+    OPACOUT = open('dustopac.inp', 'w')
 
-    lines0=["2 \t iformat (2)\n",
-            str(nbin)+" \t species\n",
-            hline]
+    lines0 = ["2 \t iformat (2)\n",
+              str(nbin)+" \t species\n",
+              hline]
     OPACOUT.writelines(lines0)
     # put first element to 10 if dustkapscatmat_species.inp input file, or 1 if dustkappa_species.inp input file
     if (scat_mode >= 3):
@@ -1162,11 +1223,11 @@ def write_dustopac(species=['ac_opct', 'Draine_Si'],nbin=20):
     else:
         inputstyle = 1
     for i in range(nbin):
-        lines=[str(inputstyle)+" \t in which form the dust opacity of dust species is to be read\n",
-               "0 \t 0 = thermal grains\n",
-               species+str(i)+" \t dustkap***.inp file\n",
-               hline
-           ]
+        lines = [str(inputstyle)+" \t in which form the dust opacity of dust species is to be read\n",
+                 "0 \t 0 = thermal grains\n",
+                 species+str(i)+" \t dustkap***.inp file\n",
+                 hline
+                 ]
         OPACOUT.writelines(lines)
     OPACOUT.close()
 
@@ -1175,7 +1236,7 @@ def write_dustopac(species=['ac_opct', 'Draine_Si'],nbin=20):
 # read opacities
 # -------------------------------------------------------------------
 def read_opacities(filein):
-    params = open(filein,'r')
+    params = open(filein, 'r')
     lines_params = params.readlines()
     params.close()
     lbda = []
@@ -1187,7 +1248,7 @@ def read_opacities(filein):
             line.split()[0][0]     # check if blank line (GWF)
         except:
             continue
-        if (line.split()[0][0]=='#'): # check if line starts with a # (comment)
+        if (line.split()[0][0] == '#'):  # check if line starts with a # (comment)
             continue
         else:
             if (len(line.split()) == 4):
@@ -1203,15 +1264,15 @@ def read_opacities(filein):
     kappa_abs = np.asarray(kappa_abs)
     kappa_sca = np.asarray(kappa_sca)
     g = np.asarray(g)
-    return [lbda,kappa_abs,kappa_sca,g]
+    return [lbda, kappa_abs, kappa_sca, g]
 
 
 # -------------------------------------------------------------------
 # plotting opacities
 # -------------------------------------------------------------------
-def plot_opacities(species='mix_2species_porous',amin=0.1,amax=1000,nbin=10,lbda1=1e-3):
+def plot_opacities(species='mix_2species_porous', amin=0.1, amax=1000, nbin=10, lbda1=1e-3):
     ax = plt.gca()
-    ax.tick_params(axis='both',length = 10, width=1)
+    ax.tick_params(axis='both', length=10, width=1)
 
     plt.xlabel(r'Dust size [meters]')
     plt.ylabel(r'Opacities $[{\rm cm}^2\;{\rm g}^{-1}]$')
@@ -1237,8 +1298,10 @@ def plot_opacities(species='mix_2species_porous',amin=0.1,amax=1000,nbin=10,lbda
         k2 = kappa_abs[i1+1]
         ks1 = kappa_sca[i1-1]
         ks2 = kappa_sca[i1+1]
-        absorption1[k] =  (k1*np.log(l2/lbda1) +  k2*np.log(lbda1/l1))/np.log(l2/l1)
-        scattering1[k] = (ks1*np.log(l2/lbda1) + ks2*np.log(lbda1/l1))/np.log(l2/l1)
+        absorption1[k] = (k1*np.log(l2/lbda1) + k2 *
+                          np.log(lbda1/l1))/np.log(l2/l1)
+        scattering1[k] = (ks1*np.log(l2/lbda1) + ks2 *
+                          np.log(lbda1/l1))/np.log(l2/l1)
 
     # nice colors
     c20 = [(31, 119, 180), (174, 199, 232), (255, 127, 14), (255, 187, 120),
@@ -1254,11 +1317,13 @@ def plot_opacities(species='mix_2species_porous',amin=0.1,amax=1000,nbin=10,lbda
 
     lbda1 *= 1e-3  # in mm
 
-    plt.loglog(sizes, absorption1, lw=2., linestyle = 'solid', color = c20[1], label='$\kappa_{abs}$ at '+str(lbda1)+' mm')
-    plt.loglog(sizes, absorption1+scattering1, lw=2., linestyle = 'dashed', color = c20[1], label='$\kappa_{abs}$+$\kappa_{sca}$ at '+str(lbda1)+' mm')
+    plt.loglog(sizes, absorption1, lw=2., linestyle='solid',
+               color=c20[1], label='$\kappa_{abs}$ at '+str(lbda1)+' mm')
+    plt.loglog(sizes, absorption1+scattering1, lw=2., linestyle='dashed',
+               color=c20[1], label='$\kappa_{abs}$+$\kappa_{sca}$ at '+str(lbda1)+' mm')
     plt.legend()
 
-    plt.ylim(absorption1.min(),(absorption1+scattering1).max())
+    plt.ylim(absorption1.min(), (absorption1+scattering1).max())
     filesaveopac = 'opacities_'+species+'.pdf'
     plt.savefig('./'+filesaveopac, bbox_inches='tight', dpi=160)
     plt.clf()
@@ -1270,9 +1335,9 @@ def plot_opacities(species='mix_2species_porous',amin=0.1,amax=1000,nbin=10,lbda
 def write_AMRgrid(F, R_Scaling=1, Plot=False):
 
     print("writing spatial grid")
-    path_grid='amr_grid.inp'
+    path_grid = 'amr_grid.inp'
 
-    grid=open(path_grid,'w')
+    grid = open(path_grid, 'w')
 
     grid.write('1 \n')              # iformat/ format number = 1
     grid.write('0 \n')              # Grid style (regular = 0)
@@ -1281,11 +1346,12 @@ def write_AMRgrid(F, R_Scaling=1, Plot=False):
     grid.write('1 \t 1 \t 1 \n')    # incl x, incl y, incl z
 
     # spherical radius, colatitude, azimuth
-    grid.write(str(F.nrad)+ '\t'+ str(F.ncol)+'\t'+ str(F.nsec)+'\n')
+    grid.write(str(F.nrad) + '\t' + str(F.ncol)+'\t' + str(F.nsec)+'\n')
 
     # nrad+1 dimension as we need to enter the coordinates of the cells edges
     for i in range(F.nrad + 1):
-        grid.write(str(F.redge[i]*F.culength*1e2)+'\t') # with unit conversion in cm
+        # with unit conversion in cm
+        grid.write(str(F.redge[i]*F.culength*1e2)+'\t')
     grid.write('\n')
 
     # colatitude
@@ -1301,7 +1367,6 @@ def write_AMRgrid(F, R_Scaling=1, Plot=False):
     grid.close()
 
 
-
 # -----------------------
 # writing out wavelength
 # -----------------------
@@ -1314,12 +1379,12 @@ def write_wavelength():
     waves = np.zeros(Nw)
     waves[0] = wmin
     for i in range(1, Nw):
-        waves[i]=wmin*Pw**i
+        waves[i] = wmin*Pw**i
 
     print('writing wavelength_micron.inp')
 
     path = 'wavelength_micron.inp'
-    wave = open(path,'w')
+    wave = open(path, 'w')
     wave.write(str(Nw)+'\n')
     for i in range(Nw):
         wave.write(str(waves[i])+'\n')
@@ -1329,7 +1394,7 @@ def write_wavelength():
 # -----------------------
 # writing out star parameters
 # -----------------------
-def write_stars(Rstar = 1, Tstar = 6000):
+def write_stars(Rstar=1, Tstar=6000):
     wmin = 0.1
     wmax = 10000.0
     Nw = 150
@@ -1338,12 +1403,12 @@ def write_stars(Rstar = 1, Tstar = 6000):
     waves = np.zeros(Nw)
     waves[0] = wmin
     for i in range(1, Nw):
-        waves[i]=wmin*Pw**i
+        waves[i] = wmin*Pw**i
 
     print('writing stars.inp')
 
     path = 'stars.inp'
-    wave = open(path,'w')
+    wave = open(path, 'w')
 
     wave.write('\t 2\n')
     wave.write('1 \t'+str(Nw)+'\n')
@@ -1357,24 +1422,24 @@ def write_stars(Rstar = 1, Tstar = 6000):
 # --------------------
 # writing radmc3d.inp
 # --------------------
-def write_radmc3dinp(incl_dust = 1,
-                     incl_lines = 0,
-                     lines_mode = 1,
-                     nphot = 1000000,
-                     nphot_scat = 1000000,
-                     nphot_spec = 1000000,
-                     nphot_mono = 1000000,
-                     istar_sphere = 0,
-                     scattering_mode_max = 0,
-                     tgas_eq_tdust = 1,
-                     modified_random_walk = 0,
+def write_radmc3dinp(incl_dust=1,
+                     incl_lines=0,
+                     lines_mode=1,
+                     nphot=1000000,
+                     nphot_scat=1000000,
+                     nphot_spec=1000000,
+                     nphot_mono=1000000,
+                     istar_sphere=0,
+                     scattering_mode_max=0,
+                     tgas_eq_tdust=1,
+                     modified_random_walk=0,
                      itempdecoup=1,
                      setthreads=2,
-                     rto_style=3 ):
+                     rto_style=3):
 
     print('writing radmc3d.inp')
 
-    RADMCINP = open('radmc3d.inp','w')
+    RADMCINP = open('radmc3d.inp', 'w')
     inplines = ["incl_dust = "+str(int(incl_dust))+"\n",
                 "incl_lines = "+str(int(incl_lines))+"\n",
                 "lines_mode = "+str(int(lines_mode))+"\n",
@@ -1396,21 +1461,26 @@ def write_radmc3dinp(incl_dust = 1,
 # --------------------
 # writing lines.inp
 # --------------------
-def write_lines(specie,lines_mode):
+
+
+def write_lines(specie, lines_mode):
 
     print("writing lines.inp")
-    path_lines='lines.inp'
+    path_lines = 'lines.inp'
 
-    lines=open(path_lines,'w')
+    lines = open(path_lines, 'w')
 
     lines.write('2 \n')              # <=== Put this to 2
-    lines.write('1 \n')              # Nr of molecular or atomic species to be modeled
+    # Nr of molecular or atomic species to be modeled
+    lines.write('1 \n')
     # LTE calculations
     if lines_mode == 1:
-        lines.write('%s    leiden    0    0    0'%specie)    # incl x, incl y, incl z
+        lines.write('%s    leiden    0    0    0' %
+                    specie)    # incl x, incl y, incl z
     else:
-    # non-LTE calculations
-        lines.write('%s    leiden    0    0    1\n'%specie)    # incl x, incl y, incl z
+        # non-LTE calculations
+        lines.write('%s    leiden    0    0    1\n' %
+                    specie)    # incl x, incl y, incl z
         lines.write('h2')
     lines.close()
 
@@ -1434,95 +1504,98 @@ def write_lines(specie,lines_mode):
 # -----------------------------------------------------
 # Main routine to deproject cartesian flux maps onto polar maps (SC, SP)
 # -----------------------------------------------------
-def exec_polar_expansions(filename_source,workdir,PA,cosi,RA=False,DEC=False,alpha_min=False,Delta_min=False,XCheckInv=False,DoRadialProfile=True,ProfileExtractRadius=-1,DoAzimuthalProfile=False,PlotRadialProfile=True,zoomfactor=1.):
+def exec_polar_expansions(filename_source, workdir, PA, cosi, RA=False, DEC=False, alpha_min=False, Delta_min=False, XCheckInv=False, DoRadialProfile=True, ProfileExtractRadius=-1, DoAzimuthalProfile=False, PlotRadialProfile=True, zoomfactor=1.):
 
-    fieldscale=2. # shrink radial field of view of polar maps by this factor
+    fieldscale = 2.  # shrink radial field of view of polar maps by this factor
 
     if workdir[-1] != '/':
         workdir += '/'
     os.system("rm -rf mkdir "+workdir)
     os.system("mkdir "+workdir)
-    inbasename=os.path.basename(filename_source)
-    filename_fullim=re.sub('.fits', '_fullim.fits', inbasename)
-    filename_fullim=workdir+filename_fullim
+    inbasename = os.path.basename(filename_source)
+    filename_fullim = re.sub('.fits', '_fullim.fits', inbasename)
+    filename_fullim = workdir+filename_fullim
 
     hdu0 = fits.open(filename_source)
     hdr0 = hdu0[0].header
     # copy content of original fits file
     os.system("rsync -va "+filename_source+" "+filename_fullim)
     hdu = fits.open(filename_fullim)
-    im1=hdu[0].data
-    hdr1=hdu[0].header
+    im1 = hdu[0].data
+    hdr1 = hdu[0].header
 
-    if (not (isinstance(Delta_min,bool))):
-        if (isinstance(RA,bool)):
+    if (not (isinstance(Delta_min, bool))):
+        if (isinstance(RA, bool)):
             if (not RA):
-                RA=hdr1['CRVAL1']
-                DEC=hdr1['CRVAL2']
+                RA = hdr1['CRVAL1']
+                DEC = hdr1['CRVAL2']
 
-        RA=RA+(np.sin(alpha_min*np.pi/180.)*Delta_min/3600.)/np.cos(DEC*np.pi/180.)
-        DEC=DEC+np.cos(alpha_min*np.pi/180.)*Delta_min/3600.
+        RA = RA+(np.sin(alpha_min*np.pi/180.)*Delta_min/3600.) / \
+            np.cos(DEC*np.pi/180.)
+        DEC = DEC+np.cos(alpha_min*np.pi/180.)*Delta_min/3600.
 
-    elif (not isinstance(RA,float)):
+    elif (not isinstance(RA, float)):
         sys.exit("must provide a center")
 
-    nx=int(hdr1['NAXIS1']/zoomfactor)   # zoomfactor = 1 in practice
-    ny=nx
-    if ( (nx % 2) == 0):
-        nx=nx+1
-        ny=ny+1
+    nx = int(hdr1['NAXIS1']/zoomfactor)   # zoomfactor = 1 in practice
+    ny = nx
+    if ((nx % 2) == 0):
+        nx = nx+1
+        ny = ny+1
 
     hdr2 = deepcopy(hdr1)
-    hdr2['NAXIS1']=nx
-    hdr2['NAXIS2']=ny
-    hdr2['CRPIX1']=(nx+1)/2
-    hdr2['CRPIX2']=(ny+1)/2
-    hdr2['CRVAL1']=RA
-    hdr2['CRVAL2']=DEC
+    hdr2['NAXIS1'] = nx
+    hdr2['NAXIS2'] = ny
+    hdr2['CRPIX1'] = (nx+1)/2
+    hdr2['CRPIX2'] = (ny+1)/2
+    hdr2['CRVAL1'] = RA
+    hdr2['CRVAL2'] = DEC
 
-    resamp=gridding(filename_fullim,hdr2, fullWCS=False)
-    fileout_centered=re.sub('fullim.fits', 'centered.fits', filename_fullim)
-    fits.writeto(fileout_centered,resamp, hdr2, overwrite=True)
+    resamp = gridding(filename_fullim, hdr2, fullWCS=False)
+    fileout_centered = re.sub('fullim.fits', 'centered.fits', filename_fullim)
+    fits.writeto(fileout_centered, resamp, hdr2, overwrite=True)
 
     # First rotate original, centred image by position angle
     rotangle = PA
     im1rot = ndimage.rotate(resamp, rotangle, reshape=False)
-    fileout_rotated=re.sub('fullim.fits', 'rotated.fits', filename_fullim)
-    fits.writeto(fileout_rotated,im1rot, hdr2, overwrite=True)
+    fileout_rotated = re.sub('fullim.fits', 'rotated.fits', filename_fullim)
+    fits.writeto(fileout_rotated, im1rot, hdr2, overwrite=True)
     hdr3 = deepcopy(hdr2)
-    hdr3['CDELT1']=hdr3['CDELT1']*cosi
+    hdr3['CDELT1'] = hdr3['CDELT1']*cosi
 
     # Then deproject with inclination via hdr3
-    im3=gridding(fileout_rotated,hdr3)
-    fileout_stretched=re.sub('fullim.fits', 'stretched.fits', filename_fullim)
-    fits.writeto(fileout_stretched,im3, hdr2, overwrite=True)
+    im3 = gridding(fileout_rotated, hdr3)
+    fileout_stretched = re.sub(
+        'fullim.fits', 'stretched.fits', filename_fullim)
+    fits.writeto(fileout_stretched, im3, hdr2, overwrite=True)
 
     # Finally work out polar transformation
-    im_polar = sp.ndimage.geometric_transform(im3,cartesian2polar,
+    im_polar = sp.ndimage.geometric_transform(im3, cartesian2polar,
                                               order=1,
-                                              output_shape = (im3.shape[0], im3.shape[1]),
-                                              extra_keywords = {'inputshape':im3.shape,'fieldscale':fieldscale,
-                                                                'origin':(((nx+1)/2)-1,((ny+1)/2)-1)})
+                                              output_shape=(
+                                                  im3.shape[0], im3.shape[1]),
+                                              extra_keywords={'inputshape': im3.shape, 'fieldscale': fieldscale,
+                                                              'origin': (((nx+1)/2)-1, ((ny+1)/2)-1)})
 
-    nphis,nrs=im_polar.shape
+    nphis, nrs = im_polar.shape
 
     hdupolar = fits.PrimaryHDU()
     hdupolar.data = im_polar
-    hdrpolar=hdupolar.header
-    hdrpolar['CRPIX1']=1
-    hdrpolar['CRVAL1']=0.
-    hdrpolar['CDELT1']=2. * np.pi / nphis
-    hdrpolar['CRPIX2']=1
-    hdrpolar['CRVAL2']=0.
-    hdrpolar['CDELT2']=(hdr3['CDELT2'] / fieldscale)
+    hdrpolar = hdupolar.header
+    hdrpolar['CRPIX1'] = 1
+    hdrpolar['CRVAL1'] = 0.
+    hdrpolar['CDELT1'] = 2. * np.pi / nphis
+    hdrpolar['CRPIX2'] = 1
+    hdrpolar['CRVAL2'] = 0.
+    hdrpolar['CDELT2'] = (hdr3['CDELT2'] / fieldscale)
     hdupolar.header = hdrpolar
 
-    fileout_polar=re.sub('fullim.fits', 'polar.fits', filename_fullim)
+    fileout_polar = re.sub('fullim.fits', 'polar.fits', filename_fullim)
     hdupolar.writeto(fileout_polar, overwrite=True)
 
 
 # --------------------
-#Function required in exec_polar_expansions
+# Function required in exec_polar_expansions
 # --------------------
 def datafits(namefile):
     """
@@ -1533,54 +1606,58 @@ def datafits(namefile):
     return datacube, hdr
 
 # --------------------
-#Function required in exec_polar_expansions
+# Function required in exec_polar_expansions
 # --------------------
-def gridding(imagefile_1, imagefile_2,fileout=False,fullWCS=True):
+
+
+def gridding(imagefile_1, imagefile_2, fileout=False, fullWCS=True):
     """
     Interpolates Using ndimage and astropy.wcs for coordinate system.
     """
-    if (isinstance(imagefile_1,str)):
+    if (isinstance(imagefile_1, str)):
         im1, hdr1 = datafits(imagefile_1)
-    elif (isinstance(imagefile_1,fits.hdu.image.PrimaryHDU)):
+    elif (isinstance(imagefile_1, fits.hdu.image.PrimaryHDU)):
         im1 = imagefile_1.data
         hdr1 = imagefile_1.header
-    elif (isinstance(imagefile_1,fits.hdu.hdulist.HDUList)):
+    elif (isinstance(imagefile_1, fits.hdu.hdulist.HDUList)):
         im1 = imagefile_1[0].data
         hdr1 = imagefile_1[0].header
     else:
         sys.exit("not an recognized input format")
 
-    if (isinstance(imagefile_2,str)):
+    if (isinstance(imagefile_2, str)):
         im2, hdr2 = datafits(imagefile_2)
     else:
-        hdr2=imagefile_2
+        hdr2 = imagefile_2
 
     w1 = WCS(hdr1)
     w2 = WCS(hdr2)
 
     n2x = hdr2['NAXIS1']
     n2y = hdr2['NAXIS2']
-    k2s=sp.arange(0,n2x)
-    l2s=sp.arange(0,n2y)
+    k2s = sp.arange(0, n2x)
+    l2s = sp.arange(0, n2y)
     kk2s, ll2s = sp.meshgrid(k2s, l2s)
 
     if (fullWCS):
         xxs2wcs, yys2wcs = w2.all_pix2world(kk2s, ll2s, 0)
-        kk1s, ll1s = w1.all_world2pix(xxs2wcs,yys2wcs,0,tolerance=1e-12)
+        kk1s, ll1s = w1.all_world2pix(xxs2wcs, yys2wcs, 0, tolerance=1e-12)
     else:
         xxs2wcs, yys2wcs = w2.wcs_pix2world(kk2s, ll2s, 0)
-        kk1s, ll1s = w1.wcs_world2pix(xxs2wcs,yys2wcs,0)
+        kk1s, ll1s = w1.wcs_world2pix(xxs2wcs, yys2wcs, 0)
 
     resamp = map_coordinates(im1, [ll1s, kk1s])
 
     if (fileout):
-        fits.writeto(fileout,resamp, hdr2, overwrite=True)
+        fits.writeto(fileout, resamp, hdr2, overwrite=True)
 
     return resamp
 
 # --------------------
-#Function required in exec_polar_expansions
+# Function required in exec_polar_expansions
 # --------------------
+
+
 def cartesian2polar(outcoords, inputshape, origin, fieldscale=1.):
     # Routine from original PolarMaps.py
     """Coordinate transform for converting a polar array to Cartesian coordinates.
@@ -1591,20 +1668,22 @@ def cartesian2polar(outcoords, inputshape, origin, fieldscale=1.):
     rindex, thetaindex = outcoords
     x0, y0 = origin
 
-    theta = thetaindex * 2 * np.pi / (inputshape[0]-1)   # inputshape[0] = nbpixels+1
+    theta = thetaindex * 2 * np.pi / \
+        (inputshape[0]-1)   # inputshape[0] = nbpixels+1
     y = rindex*np.cos(theta)/fieldscale
     x = rindex*np.sin(theta)/fieldscale
     ix = -x + x0
-    iy = y +  y0
+    iy = y + y0
 
-    return (iy,ix)
+    return (iy, ix)
 
 # -----------------------------------------------------
+
 
 # =========================
 # 1. read RT parameter file
 # =========================
-params = open("params.dat",'r')# opening parfile
+params = open("params.dat", 'r')  # opening parfile
 lines_params = params.readlines()     # reading parfile
 params.close()                 # closing parfile
 par = []                       # allocating a dictionary
@@ -1614,7 +1693,7 @@ for line in lines_params:      # iterating over parfile
         line.split()[0][0]     # check if blank line (GWF)
     except:
         continue
-    if (line.split()[0][0]=='#'): # check if line starts with a # (comment)
+    if (line.split()[0][0] == '#'):  # check if line starts with a # (comment)
         continue
     else:
         name, value = line.split()[0:2]
@@ -1629,7 +1708,7 @@ for line in lines_params:      # iterating over parfile
     var.append(name)
 
 for i in range(len(par)):
-    #exec(var[i]+"="+par[i])
+    # exec(var[i]+"="+par[i])
     exec(var[i]+"="+str(par[i]))
 
 # save copy of params.dat
@@ -1639,12 +1718,12 @@ os.system('cp params.dat params_last.dat')
 print('--------- RT parameters ----------')
 print('RT in the dust or in gas lines? = ', RTdust_or_gas)
 if RTdust_or_gas == 'dust':
-    incl_dust  = 1
+    incl_dust = 1
     incl_lines = 0
     linenlam = 1
 if RTdust_or_gas == 'gas':
     incl_lines = 1
-    incl_dust  = 0
+    incl_dust = 0
     # currently in our RT gas calculations, the gas temperature has to
     # be that in the hydro simulation, it cannot be equal to the dust
     # temperature computed by a RT Monte-Carlo calculation
@@ -1659,7 +1738,8 @@ if RTdust_or_gas == 'gas':
         print('turbulent velocity [m/s] = ', turbvel)
     print('abundance of the gas species = ', abundance)
     if moment_order == 1 and inclination == 0.0:
-        sys.exit("To get an actual velocity map you need a non-zero disc inclination. Abort!")
+        sys.exit(
+            "To get an actual velocity map you need a non-zero disc inclination. Abort!")
 print('directory = ', dir)
 if isinstance(dir, str) == False:
     input_file = dir[0]+'/summary0.dat'
@@ -1677,10 +1757,13 @@ print('do we plot optical depth? : ', plot_tau)
 print('do we compute polarized intensity image? : ', polarized_scat)
 if polarized_scat == 'Yes':
     z_expansion = 'G'
-    print('truncation_radius for dust pressure scale height [arcseconds] : ', truncation_radius)
+    print(
+        'truncation_radius for dust pressure scale height [arcseconds] : ', truncation_radius)
     if scat_mode != 5:
-        sys.exit("To get a polarized intensity image you need scat_mode = 5 in params.dat. Abort!")
-    print('mask_radius in polarized intensity image [arcseconds] : ', mask_radius)
+        sys.exit(
+            "To get a polarized intensity image you need scat_mode = 5 in params.dat. Abort!")
+    print(
+        'mask_radius in polarized intensity image [arcseconds] : ', mask_radius)
 print('dust minimum size [m] = ', amin)
 print('dust maximum size [m] = ', amax)
 print('minus slope of dust size distribution = ', pindex)
@@ -1697,7 +1780,7 @@ print('star radius [Rsun] = ', rstar)
 print('star effective temperature [K] = ', teff)
 print('Do we display intensity in brightness temperature?: ', brightness_temp)
 print('number of grid cells in colatitude for RADMC3D = ', ncol)
-if ncol%2 == 1:
+if ncol % 2 == 1:
     sys.exit('the number of columns needs to be an even number, please try again!')
 print('type of vertical expansion done for dust mass volume density = ', z_expansion)
 if z_expansion == 'G':
@@ -1746,19 +1829,22 @@ print('x- and y-max in final image [arcsec] = ', minmaxaxis)
 print('do we use second-order integration for ray tracing in RADMC3D? : ', secondorder)
 print('do we flip x-axis in disc plane? (mirror symmetry x -> -x in the simulation): ', xaxisflip)
 print('do we check beam shape by adding a source point at the origin?: ', check_beam)
-print('do we deproject the predicted image into polar coords?:', deproj_polar) # SP
-print('do we compute the axisymmetric profile of the convolved intensity?:', axi_intensity) # GWF
+print('do we deproject the predicted image into polar coords?:', deproj_polar)  # SP
+print('do we compute the axisymmetric profile of the convolved intensity?:',
+      axi_intensity)  # GWF
 if axi_intensity == 'Yes':
     deproj_polar = 'Yes'
 print('do we plot radial temperature profiles? : ', plot_temperature)
 print('do we override code units in hydro simulation? : ', override_units)
 if override_units == 'Yes':
     if new_unit_length == 0.0:
-        sys.exit('override_units set to yes but new_unit_length is not defined in params.dat, I must exit!')
+        sys.exit(
+            'override_units set to yes but new_unit_length is not defined in params.dat, I must exit!')
     else:
         print('new unit of length in meters? : ', new_unit_length)
     if new_unit_mass == 0.0:
-        sys.exit('override_units set to yes but new_unit_mass is not defined in params.dat, I must exit!')
+        sys.exit(
+            'override_units set to yes but new_unit_mass is not defined in params.dat, I must exit!')
     else:
         print('new unit of mass in kg? : ', new_unit_mass)
 
@@ -1776,7 +1862,7 @@ bpaangle = -90.0-bpaangle
 if fargo3d == 'Yes' and polarized_scat == 'No':
     # find out how many dust fluids there are:
     input_file = dir+'/dustsizes.dat'
-    dust_id, dust_size, dust_gas_ratio = np.loadtxt(input_file,unpack=True)
+    dust_id, dust_size, dust_gas_ratio = np.loadtxt(input_file, unpack=True)
     nbin = len(dust_id)
     amin = dust_size.min()
     amax = dust_size.max()
@@ -1800,28 +1886,32 @@ if fargo3d == 'Yes' and polarized_scat == 'No':
 
 # label for the name of the image file created by RADMC3D
 if RTdust_or_gas == 'dust':
-    label = dir+'_o'+str(on)+'_p'+str(pindex)+'_r'+str(ratio)+'_a'+str(amin)+'_'+str(amax)+'_nb'+str(nbin)+'_mode'+str(scat_mode)+'_np'+str('{:.0e}'.format(nb_photons))+'_nc'+str(ncol)+'_z'+str(z_expansion)+'_xf'+str(xaxisflip)+'_Td'+str(Tdust_eq_Thydro)
+    label = dir+'_o'+str(on)+'_p'+str(pindex)+'_r'+str(ratio)+'_a'+str(amin)+'_'+str(amax)+'_nb'+str(nbin)+'_mode'+str(scat_mode) + \
+        '_np'+str('{:.0e}'.format(nb_photons))+'_nc'+str(ncol)+'_z' + \
+        str(z_expansion)+'_xf'+str(xaxisflip)+'_Td'+str(Tdust_eq_Thydro)
 else:
     if widthkms == 0.0:
-        label = dir+'_o'+str(on)+'_gas'+str(gasspecies)+'_iline'+str(iline)+'_lmode'+str(lines_mode)+'_ab'+str('{:.0e}'.format(abundance))+'_vkms'+str(vkms)+'_turbvel'+str(turbvel)+'_nc'+str(ncol)+'_xf'+str(xaxisflip)+'_Td'+str(Tdust_eq_Thydro)
+        label = dir+'_o'+str(on)+'_gas'+str(gasspecies)+'_iline'+str(iline)+'_lmode'+str(lines_mode)+'_ab'+str('{:.0e}'.format(
+            abundance))+'_vkms'+str(vkms)+'_turbvel'+str(turbvel)+'_nc'+str(ncol)+'_xf'+str(xaxisflip)+'_Td'+str(Tdust_eq_Thydro)
     else:
-        label = dir+'_o'+str(on)+'_gas'+str(gasspecies)+'_iline'+str(iline)+'_lmode'+str(lines_mode)+'_ab'+str('{:.0e}'.format(abundance))+'_widthkms'+str(widthkms)+'_turbvel'+str(turbvel)+'_nc'+str(ncol)+'_xf'+str(xaxisflip)+'_Td'+str(Tdust_eq_Thydro)
+        label = dir+'_o'+str(on)+'_gas'+str(gasspecies)+'_iline'+str(iline)+'_lmode'+str(lines_mode)+'_ab'+str('{:.0e}'.format(
+            abundance))+'_widthkms'+str(widthkms)+'_turbvel'+str(turbvel)+'_nc'+str(ncol)+'_xf'+str(xaxisflip)+'_Td'+str(Tdust_eq_Thydro)
 
 # set spherical grid, array allocation.
 # get the aspect ratio and flaring index used in the numerical simulation
 #command = 'gawk " BEGIN{IGNORECASE=1} /^AspectRatio/ " '+dir+'/*.par'
 # check which version of python we're using
-#if sys.version_info[0] < 3:   # python 2.X
+# if sys.version_info[0] < 3:   # python 2.X
 #    buf = subprocess.check_output(command, shell=True)
-#else:                         # python 3.X
+# else:                         # python 3.X
 #    buf = subprocess.getoutput(command)
 #aspectratio = float(buf.split()[1])
 aspectratio = 0.1
 # get the flaring index used in the numerical simulation
 #command = 'gawk " BEGIN{IGNORECASE=1} /^FlaringIndex/ " '+dir+'/*.par'
-#if sys.version_info[0] < 3:
+# if sys.version_info[0] < 3:
 #    buf = subprocess.check_output(command, shell=True)
-#else:
+# else:
 #    buf = subprocess.getoutput(command)
 #flaringindex = float(buf.split()[1])
 flaringindex = 0.
@@ -1847,7 +1937,7 @@ except IndexError:
 
 
 # get the grid's radial spacing
-#if fargo3d == 'No':
+# if fargo3d == 'No':
 #    command = 'awk " /^RadialSpacing/ " '+dir+'/*.par'
 #    if sys.version_info[0] < 3:
 #        buf = subprocess.check_output(command, shell=True)
@@ -1861,29 +1951,30 @@ print('gas flaring index = ', flaringindex)
 print('gas alpha turbulent viscosity = ', alphaviscosity)
 
 # gas surface density field:
-D = pload(ns=300,w_dir=dir)
-gas  = Field(field='rho', directory=dir)
+gas = Field(field='rho', directory=dir)
 
 # 2D computational grid: R = grid cylindrical radius in code units, T = grid azimuth in radians
 R = gas.redge
 T = gas.pedge
 
 # number of grid cells in the radial and azimuthal directions
-nrad = np.shape(D.x1)[2]
-ncol = np.shape(D.x2)[1]
-nsec = np.shape(D.x3)[0]
+nrad = np.shape(gas.data)[2]
+ncol = np.shape(gas.data)[1]
+nsec = np.shape(gas.data)[0]
 
 # extra useful quantities (code units)
 Rinf = gas.redge[0:len(gas.redge)-1]
 Rsup = gas.redge[1:len(gas.redge)]
 
-surface  = np.zeros((nsec,nrad)) # 2D array containing surface of each grid cell
-surf = pi * (Rsup*Rsup - Rinf*Rinf) / nsec # surface of each grid cell (code units)
+# 2D array containing surface of each grid cell
+surface = np.zeros((nsec, nrad))
+# surface of each grid cell (code units)
+surf = pi * (Rsup*Rsup - Rinf*Rinf) / nsec
 for th in range(nsec):
-    surface[th,:] = surf
+    surface[th, :] = surf
 
 # Mass of gas in units of the star's mass
-Mgas = np.sum(gas.data[0,:,:]*surface)
+Mgas = np.sum(gas.data[0, :, :]*surface)
 print('Mgas / Mstar= '+str(Mgas)+' and Mgas [kg] = '+str(Mgas*gas.cumass))
 
 # Allocate arrays
@@ -1891,7 +1982,8 @@ dust = np.zeros((nsec*nrad*nbin))
 if fargo3d == 'No' or polarized_scat == 'Yes':
     bins = np.logspace(np.log10(amin), np.log10(amax), nbin+1)
     nparticles = np.zeros(nbin)     # number of particles per bin size
-    avgstokes  = np.zeros(nbin)     # average Stokes number of particles per bin size
+    # average Stokes number of particles per bin size
+    avgstokes = np.zeros(nbin)
 
 # Color map
 mycolormap = 'nipy_spectral'
@@ -1926,7 +2018,7 @@ if (RTdust_or_gas == 'dust' and recalc_density == 'Yes' and polarized_scat == 'N
 
     # read information on the dust particles
     #(rad, azi, vr, vt, Stokes, a) = np.loadtxt(dir+'/dustsystat'+str(on)+'.dat', unpack=True)
-    pdata = Particles(ns=9,directory=dir)
+    pdata = Particles(ns=9, directory=dir)
     rad = pdata.pos_x
     azi = pdata.pos_z
     vr = pdata.vel_x
@@ -1935,7 +2027,7 @@ if (RTdust_or_gas == 'dust' and recalc_density == 'Yes' and polarized_scat == 'N
     a = pdata.radius
 
     # Populate dust bins
-    for m in range (len(rad)):   # CB: sum over dust particles
+    for m in range(len(rad)):   # CB: sum over dust particles
         r = rad[m]
         t = azi[m]
         # radial index of the cell where the particle is
@@ -1950,10 +2042,11 @@ if (RTdust_or_gas == 'dust' and recalc_density == 'Yes' and polarized_scat == 'N
         # particle size
         pcsize = a[m]
         # find out which bin particle belongs to
-        ibin = int(np.log(pcsize/bins.min())/np.log(bins.max()/bins.min()) * nbin)
+        ibin = int(np.log(pcsize/bins.min()) /
+                   np.log(bins.max()/bins.min()) * nbin)
         if (ibin >= 0 and ibin < nbin):
             k = ibin*nsec*nrad + j*nrad + i
-            dust[k] +=1
+            dust[k] += 1
             nparticles[ibin] += 1
             avgstokes[ibin] += Stokes[m]
 
@@ -1961,45 +2054,57 @@ if (RTdust_or_gas == 'dust' and recalc_density == 'Yes' and polarized_scat == 'N
         if nparticles[ibin] == 0:
             nparticles[ibin] = 1
         avgstokes[ibin] /= nparticles[ibin]
-        print(str(nparticles[ibin])+' grains between '+str(bins[ibin])+' and '+str(bins[ibin+1])+' meters')
+        print(str(nparticles[ibin])+' grains between ' +
+              str(bins[ibin])+' and '+str(bins[ibin+1])+' meters')
 
     # dustcube currently contains N_i (r,phi), the number of particles per bin size in every grid cell
     dustcube = dust.reshape(nbin, nsec, nrad)
-    #dustcube = np.swapaxes(dustcube,1,2)  # means nbin, nrad, nsec
+    # dustcube = np.swapaxes(dustcube,1,2)  # means nbin, nrad, nsec
 
     frac = np.zeros(nbin)
     buf = 0.0
     # finally compute dust surface density for each size bin
     for ibin in range(nbin):
         # fraction of dust mass in current size bin 'ibin', easy to check numerically that sum_frac = 1
-        frac[ibin] = (bins[ibin+1]**(4.0-pindex) - bins[ibin]**(4.0-pindex)) / (amax**(4.0-pindex) - amin**(4.0-pindex))
+        frac[ibin] = (bins[ibin+1]**(4.0-pindex) - bins[ibin] **
+                      (4.0-pindex)) / (amax**(4.0-pindex) - amin**(4.0-pindex))
         # total mass of dust particles in current size bin 'ibin'
         M_i_dust = ratio * Mgas * frac[ibin]
         buf += M_i_dust
-        print('Dust mass [in units of Mstar] in species ', ibin, ' = ', M_i_dust)
+        print('Dust mass [in units of Mstar] in species ',
+              ibin, ' = ', M_i_dust)
         # dustcube, which contained N_i(r,phi), now contains sigma_i_dust (r,phi)
-        dustcube[ibin,:,:] *= M_i_dust / surface / nparticles[ibin]
+        dustcube[ibin, :, :] *= M_i_dust / surface / nparticles[ibin]
         # conversion in g/cm^2
-        dustcube[ibin,:,:] *= (gas.cumass*1e3)/((gas.culength*1e2)**2.)  # dimensions: nbin, nrad, nsec
+        # dimensions: nbin, nrad, nsec
+        dustcube[ibin, :, :] *= (gas.cumass*1e3)/((gas.culength*1e2)**2.)
 
     # Overwrite first bin (ibin = 0) to model extra bin with small dust tightly coupled to the gas
     if bin_small_dust == 'Yes':
         frac[0] *= 5e3
         print("!!!!!!!!!!!!!!!!!!!!!!!!!!!")
         print("Bin with index 0 changed to include arbitrarilly small dust tightly coupled to the gas")
-        print("Mass fraction of bin 0 changed to: ",str(frac[0]))
+        print("Mass fraction of bin 0 changed to: ", str(frac[0]))
         print("!!!!!!!!!!!!!!!!!!!!!!!!!!!")
-        imin = np.argmin(np.abs(gas.rmed-1.4))  # radial index corresponding to 0.3"
-        imax = np.argmin(np.abs(gas.rmed-2.8))  # radial index corresponding to 0.6"
-        dustcube[0,imin:imax,:] = gas.data[imin:imax,:] * ratio * frac[0] * (gas.cumass*1e3)/((gas.culength*1e2)**2.)  # dimensions: nbin, nrad, nsec
+        # radial index corresponding to 0.3"
+        imin = np.argmin(np.abs(gas.rmed-1.4))
+        # radial index corresponding to 0.6"
+        imax = np.argmin(np.abs(gas.rmed-2.8))
+        dustcube[0, imin:imax, :] = gas.data[imin:imax, :] * ratio * frac[0] * \
+            (gas.cumass*1e3)/((gas.culength*1e2)
+                              ** 2.)  # dimensions: nbin, nrad, nsec
 
-    print('Total dust mass [g] = ', np.sum(dustcube[:,:,:]*surface*(gas.culength*1e2)**2.))
-    print('Total dust mass [Mgas] = ', np.sum(dustcube[:,:,:]*surface*(gas.culength*1e2)**2.)/(Mgas*gas.cumass*1e3))
-    print('Total dust mass [Mstar] = ', np.sum(dustcube[:,:,:]*surface*(gas.culength*1e2)**2.)/(gas.cumass*1e3))
+    print('Total dust mass [g] = ', np.sum(
+        dustcube[:, :, :]*surface*(gas.culength*1e2)**2.))
+    print('Total dust mass [Mgas] = ', np.sum(
+        dustcube[:, :, :]*surface*(gas.culength*1e2)**2.)/(Mgas*gas.cumass*1e3))
+    print('Total dust mass [Mstar] = ', np.sum(
+        dustcube[:, :, :]*surface*(gas.culength*1e2)**2.)/(gas.cumass*1e3))
 
     # Total dust surface density
-    dust_surface_density = np.sum(dustcube,axis=0)
-    print('Maximum dust surface density [in g/cm^2] is ', dust_surface_density.max())
+    dust_surface_density = np.sum(dustcube, axis=0)
+    print(
+        'Maximum dust surface density [in g/cm^2] is ', dust_surface_density.max())
 
 
 # -  -  -  -  -  -  -  -  -  -  -  -  -  -
@@ -2008,7 +2113,7 @@ if (RTdust_or_gas == 'dust' and recalc_density == 'Yes' and polarized_scat == 'N
 if (RTdust_or_gas == 'dust' and recalc_density == 'Yes' and polarized_scat == 'No' and fargo3d == 'Yes'):
 
     dustcube = dust.reshape(nbin, nsec, nrad)
-    dustcube = np.swapaxes(dustcube,1,2)  # means nbin, nrad, nsec
+    dustcube = np.swapaxes(dustcube, 1, 2)  # means nbin, nrad, nsec
 
     for ibin in range(len(dust_id)):
 
@@ -2016,26 +2121,31 @@ if (RTdust_or_gas == 'dust' and recalc_density == 'Yes' and polarized_scat == 'N
         #print('ibin = ', ibin, ', read file = ',fileread)
 
         # directly read dust surface density for each dust fluid in code units
-        dustcube[ibin,:,:]  = Field(field=fileread, directory=dir).data
+        dustcube[ibin, :, :] = Field(field=fileread, directory=dir).data
 
         # conversion in g/cm^2
-        dustcube[ibin,:,:] *= (gas.cumass*1e3)/((gas.culength*1e2)**2.)  # dimensions: nbin, nrad, nsec
+        # dimensions: nbin, nrad, nsec
+        dustcube[ibin, :, :] *= (gas.cumass*1e3)/((gas.culength*1e2)**2.)
 
         # decrease dust surface density inside mask radius
         # NB: mask_radius is in arcseconds
         rmask_in_code_units = mask_radius*distance*au/gas.culength/1e2
         for i in range(nrad):
             if (gas.rmed[i] < rmask_in_code_units):
-                dustcube[ibin,i,:] = 0.0 # *= ( (gas.rmed[i]/rmask_in_code_units)**(10.0) ) CUIDADIN!
+                # *= ( (gas.rmed[i]/rmask_in_code_units)**(10.0) ) CUIDADIN!
+                dustcube[ibin, i, :] = 0.0
 
-
-    print('Total dust mass [g] = ', np.sum(dustcube[:,:,:]*surface*(gas.culength*1e2)**2.))
-    print('Total dust mass [Mgas] = ', np.sum(dustcube[:,:,:]*surface*(gas.culength*1e2)**2.)/(Mgas*gas.cumass*1e3))
-    print('Total dust mass [Mstar] = ', np.sum(dustcube[:,:,:]*surface*(gas.culength*1e2)**2.)/(gas.cumass*1e3))
+    print('Total dust mass [g] = ', np.sum(
+        dustcube[:, :, :]*surface*(gas.culength*1e2)**2.))
+    print('Total dust mass [Mgas] = ', np.sum(
+        dustcube[:, :, :]*surface*(gas.culength*1e2)**2.)/(Mgas*gas.cumass*1e3))
+    print('Total dust mass [Mstar] = ', np.sum(
+        dustcube[:, :, :]*surface*(gas.culength*1e2)**2.)/(gas.cumass*1e3))
 
     # Total dust surface density
-    dust_surface_density = np.sum(dustcube,axis=0)
-    print('Maximum dust surface density [in g/cm^2] is ', dust_surface_density.max())
+    dust_surface_density = np.sum(dustcube, axis=0)
+    print(
+        'Maximum dust surface density [in g/cm^2] is ', dust_surface_density.max())
 
 
 # -------------------------
@@ -2047,48 +2157,56 @@ if (RTdust_or_gas == 'dust' and recalc_density == 'Yes' and polarized_scat == 'Y
 
     dustcube = dust.reshape(nbin, nsec, nrad)
     print(np.shape(dustcube))
-    #dustcube = np.swapaxes(dustcube,1,2)  # means nbin, nrad, nsec
+    # dustcube = np.swapaxes(dustcube,1,2)  # means nbin, nrad, nsec
     frac = np.zeros(nbin)
     buf = 0.0
 
     # compute dust surface density for each size bin
     for ibin in range(nbin):
         # fraction of dust mass in current size bin 'ibin', easy to check numerically that sum_frac = 1
-        frac[ibin] = (bins[ibin+1]**(4.0-pindex) - bins[ibin]**(4.0-pindex)) / (amax**(4.0-pindex) - amin**(4.0-pindex))
+        frac[ibin] = (bins[ibin+1]**(4.0-pindex) - bins[ibin] **
+                      (4.0-pindex)) / (amax**(4.0-pindex) - amin**(4.0-pindex))
         # total mass of dust particles in current size bin 'ibin'
         M_i_dust = ratio * Mgas * frac[ibin]
         buf += M_i_dust
-        print('Dust mass [in units of Mstar] in species ', ibin, ' = ', M_i_dust)
+        print('Dust mass [in units of Mstar] in species ',
+              ibin, ' = ', M_i_dust)
         # dustcube, which contained N_i(r,phi), now contains sigma_i_dust (r,phi)
-        dustcube[ibin,:,:] = ratio * gas.data * frac[ibin]
+        dustcube[ibin, :, :] = ratio * gas.data * frac[ibin]
         #
         if cavity_pol_int == 'Yes':
-            agraincm = 10.0**(0.5*(np.log10(1e2*bins[ibin]) + np.log10(1e2*bins[ibin+1])))
-            rhopart  = 2.7  # g/cm^3 (small grains)
+            agraincm = 10.0**(0.5*(np.log10(1e2 *
+                              bins[ibin]) + np.log10(1e2*bins[ibin+1])))
+            rhopart = 2.7  # g/cm^3 (small grains)
             for i in range(nrad):
                 for j in range(nsec):
                     # local Stokes number at R,phi
-                    st = 0.5*np.pi*agraincm*rhopart/(gas.data[i,j]*gas.cumass*1e3/(gas.culength*1e2)**2.)
+                    st = 0.5*np.pi*agraincm*rhopart / \
+                        (gas.data[i, j]*gas.cumass*1e3/(gas.culength*1e2)**2.)
                     if st > 1e-4:  # 1e-3 looks like a good threshold
-                        dustcube[ibin,i,j] = 0.0
+                        dustcube[ibin, i, j] = 0.0
 
         # conversion in g/cm^2
-        dustcube[ibin,:,:] *= (gas.cumass*1e3)/((gas.culength*1e2)**2.)  # dimensions: nbin, nrad, nsec
+        # dimensions: nbin, nrad, nsec
+        dustcube[ibin, :, :] *= (gas.cumass*1e3)/((gas.culength*1e2)**2.)
         # decrease dust surface density beyond truncation radius by R^-2
         # NB: truncation_radius is in arcseconds
-        rcut_in_code_units  = truncation_radius*distance*au/gas.culength/1e2
+        rcut_in_code_units = truncation_radius*distance*au/gas.culength/1e2
         rmask_in_code_units = mask_radius*distance*au/gas.culength/1e2
         for i in range(nrad):
             if (rcut_in_code_units > 0 and gas.rmed[i] > rcut_in_code_units):
-                dustcube[ibin,i,:] *= ( (gas.rmed[i]/rcut_in_code_units)**(-10.0) )
+                dustcube[ibin, i,
+                         :] *= ((gas.rmed[i]/rcut_in_code_units)**(-10.0))
             if (gas.rmed[i] < rmask_in_code_units):
-                dustcube[ibin,i,:] = 0.0 # *= ( (gas.rmed[i]/rmask_in_code_units)**(10.0) ) CUIDADIN!
+                # *= ( (gas.rmed[i]/rmask_in_code_units)**(10.0) ) CUIDADIN!
+                dustcube[ibin, i, :] = 0.0
 
     print('Total dust mass [g] = ', buf*gas.cumass*1e3)
 
     # Total dust surface density
-    dust_surface_density = np.sum(dustcube,axis=0)
-    print('Maximum dust surface density [in g/cm^2] is ', dust_surface_density.max())
+    dust_surface_density = np.sum(dustcube, axis=0)
+    print(
+        'Maximum dust surface density [in g/cm^2] is ', dust_surface_density.max())
 
 
 # =========================
@@ -2098,35 +2216,39 @@ if (RTdust_or_gas == 'dust' and recalc_density == 'Yes' and polarized_scat == 'Y
 if RTdust_or_gas == 'dust' and recalc_density == 'Yes':
     print('--------- computing dust mass volume density ----------')
 
-    DUSTOUT = open('dust_density.inp','w')
+    DUSTOUT = open('dust_density.inp', 'w')
     DUSTOUT.write('1 \n')                           # iformat
     DUSTOUT.write(str(nrad*nsec*ncol)+' \n')        # n cells
     DUSTOUT.write(str(int(nbin))+' \n')             # nbin size bins
 
     # array (ncol, nbin, nrad, nsec)
-    rhodustcube = np.zeros((ncol,nbin,nsec,nrad))
+    rhodustcube = np.zeros((ncol, nbin, nsec, nrad))
 
     # dust aspect ratio as function of ibin and r (or actually, R, cylindrical radius)
-    hd = np.zeros((nbin,nrad))
+    hd = np.zeros((nbin, nrad))
 
     # work out averaged Stokes number per size bin with fargo3d
     # Epstein regime assumed so far in the code -> St ~ pi/2 (s x rho_int) / Sigma_gas
     # where Sigma_gas should denote the azimuthally-averaged gas surface density here
     # so that St is understood as a 2D array (nbin, nrad)
     if fargo3d == 'Yes':
-        Stokes_fargo3d = np.zeros((nbin,nrad))
-        axirhogas = np.sum(gas.data,axis=1)/nsec  # in code units
+        Stokes_fargo3d = np.zeros((nbin, nrad))
+        axirhogas = np.sum(gas.data, axis=1)/nsec  # in code units
         axirhogas *= (gas.cumass*1e3)/((gas.culength*1e2)**2.)  # in g/cm^2
         for ibin in range(nbin):
-            Stokes_fargo3d[ibin,:] = 0.5*np.pi*(dust_size[ibin]*1e2)*dust_internal_density/axirhogas  # since dust size is in meters...
+            # since dust size is in meters...
+            Stokes_fargo3d[ibin, :] = 0.5*np.pi * \
+                (dust_size[ibin]*1e2)*dust_internal_density/axirhogas
 
     for ibin in range(nbin):
         if polarized_scat == 'No':
             if fargo3d == 'No':
-                St = avgstokes[ibin]                              # avg stokes number for that bin
+                # avg stokes number for that bin
+                St = avgstokes[ibin]
             else:
                 St = Stokes_fargo3d[ibin]
-        hgas = aspectratio * (gas.rmed)**(flaringindex)       # gas aspect ratio (gas.rmed[i] = R in code units)
+        # gas aspect ratio (gas.rmed[i] = R in code units)
+        hgas = aspectratio * (gas.rmed)**(flaringindex)
         # vertical extension depends on grain Stokes number
         # T = theoretical: hd/hgas = sqrt(alpha/(St+alpha))
         # T2 = theoretical: hd/hgas = sqrt(Dz/(St+Dz)) with Dz = 10xalpha here is the coefficient for
@@ -2134,65 +2256,75 @@ if RTdust_or_gas == 'dust' and recalc_density == 'Yes':
         # F = extrapolation from the simulations by Fromang & Nelson 09
         # G = Gaussian = same as gas (case of well-coupled dust for polarized intensity images)
         if z_expansion == 'F':
-            hd[ibin,:] = 0.7 * hgas * ((St+1./St)/1000.)**(0.2)
+            hd[ibin, :] = 0.7 * hgas * ((St+1./St)/1000.)**(0.2)
         if z_expansion == 'T':
-            hd[ibin,:] = hgas * np.sqrt(alphaviscosity/(alphaviscosity+St))
+            hd[ibin, :] = hgas * np.sqrt(alphaviscosity/(alphaviscosity+St))
         if z_expansion == 'T2':
-            hd[ibin,:] = hgas * np.sqrt(10.0*alphaviscosity/(10.0*alphaviscosity+St))
+            hd[ibin, :] = hgas * \
+                np.sqrt(10.0*alphaviscosity/(10.0*alphaviscosity+St))
         if z_expansion == 'G':
-            hd[ibin,:] = hgas
+            hd[ibin, :] = hgas
 
     # dust aspect ratio as function of ibin, r and phi (2D array for each size bin)
-    hd2D = np.zeros((nbin,nsec,nrad))
+    hd2D = np.zeros((nbin, nsec, nrad))
     for th in range(nsec):
-        hd2D[:,th,:] = hd    # nbin, nrad, nsec
+        hd2D[:, th, :] = hd    # nbin, nrad, nsec
 
     # grid radius function of ibin, r and phi (2D array for each size bin)
-    r2D = np.zeros((nbin,nsec,nrad))
+    r2D = np.zeros((nbin, nsec, nrad))
     for ibin in range(nbin):
         for th in range(nsec):
-            r2D[ibin,th,:] = gas.rmed
+            r2D[ibin, th, :] = gas.rmed
 
     # work out exponential and normalization factors exp(-z^2 / 2H_d^2)
     # with z = r cos(theta) and H_d = h_d x R = h_d x r sin(theta)
     # r = spherical radius, R = cylindrical radius
     for j in range(ncol):
-        rhodustcube[j,:,:,:] = dustcube * np.exp( -0.5*(np.cos(gas.tmed[j]) / hd2D)**2.0 )   # ncol, nbin, nrad, nsec
-        rhodustcube[j,:,:,:] /= ( np.sqrt(2.*pi) * r2D * hd2D  * gas.culength*1e2 )          # quantity is now in g / cm^3
+        # ncol, nbin, nrad, nsec
+        rhodustcube[j, :, :, :] = dustcube * \
+            np.exp(-0.5*(np.cos(gas.tmed[j]) / hd2D)**2.0)
+        # quantity is now in g / cm^3
+        rhodustcube[j, :, :, :] /= (np.sqrt(2.*pi)
+                                    * r2D * hd2D * gas.culength*1e2)
 
     # for plotting purposes
-    axirhodustcube = np.sum(rhodustcube,axis=3)/nsec  # ncol, nbin, nrad
+    axirhodustcube = np.sum(rhodustcube, axis=3)/nsec  # ncol, nbin, nrad
 
     # Renormalize dust's mass volume density such that the sum over the 3D grid's volume of
     # the dust's mass volume density x the volume of each grid cell does give us the right
     # total dust mass, which equals ratio x Mgas.
     rhofield = np.sum(rhodustcube, axis=1)  # sum over dust bins
-    print("rhodustcube ",np.shape(rhodustcube)," rhofield",np.shape(rhofield))
-    Aedge,Cedge,Redge = np.meshgrid(gas.pedge, gas.tedge, gas.redge)   # ncol+1, nrad+1, Nsec+1
+    print("rhodustcube ", np.shape(rhodustcube),
+          " rhofield", np.shape(rhofield))
+    Aedge, Cedge, Redge = np.meshgrid(
+        gas.pedge, gas.tedge, gas.redge)   # ncol+1, nrad+1, Nsec+1
     r2 = Redge*Redge
-    jacob  = r2[:-1,:-1,:-1] * np.sin(Cedge[:-1,:-1,:-1])
-    dphi   = Aedge[:-1,:-1,1:] - Aedge[:-1,:-1,:-1]     # same as 2pi/nsec
-    dr     = Redge[:-1,1:,:-1] - Redge[:-1,:-1,:-1]     # same as Rsup-Rinf
-    dtheta = Cedge[1:,:-1,:-1] - Cedge[:-1,:-1,:-1]
+    jacob = r2[:-1, :-1, :-1] * np.sin(Cedge[:-1, :-1, :-1])
+    dphi = Aedge[:-1, :-1, 1:] - Aedge[:-1, :-1, :-1]     # same as 2pi/nsec
+    dr = Redge[:-1, 1:, :-1] - Redge[:-1, :-1, :-1]     # same as Rsup-Rinf
+    dtheta = Cedge[1:, :-1, :-1] - Cedge[:-1, :-1, :-1]
     # volume of a cell in cm^3
-    vol = jacob * dr * dphi * dtheta * ((gas.culength*1e2)**3)       # ncol, nrad, Nsec
-    print(np.shape(jacob),np.shape(vol))
+    vol = jacob * dr * dphi * dtheta * \
+        ((gas.culength*1e2)**3)       # ncol, nrad, Nsec
+    print(np.shape(jacob), np.shape(vol))
     total_mass = np.sum(rhofield*vol)
-    normalization_factor =  ratio * Mgas * (gas.cumass*1e3) / total_mass
+    normalization_factor = ratio * Mgas * (gas.cumass*1e3) / total_mass
     rhodustcube = rhodustcube*normalization_factor
-    print('total dust mass after vertical expansion [g] = ', np.sum(np.sum(rhodustcube, axis=1)*vol), ' as normalization factor = ', normalization_factor)
+    print('total dust mass after vertical expansion [g] = ', np.sum(np.sum(
+        rhodustcube, axis=1)*vol), ' as normalization factor = ', normalization_factor)
 
     # write mass volume densities for all size bins
     for ibin in range(nbin):
-        print('dust species in bin', ibin, 'out of ',nbin-1)
+        print('dust species in bin', ibin, 'out of ', nbin-1)
         for k in range(nsec):
             for j in range(ncol):
                 for i in range(nrad):
-                    DUSTOUT.write(str(rhodustcube[j,ibin,i,k])+' \n')
+                    DUSTOUT.write(str(rhodustcube[j, ibin, i, k])+' \n')
 
     # print max of dust's mass volume density at each colatitude
     for j in range(ncol):
-        print('max(rho_dustcube) [g cm-3] for colatitude index j = ', j, ' = ', rhodustcube[j,:,:,:].max())
+        print('max(rho_dustcube) [g cm-3] for colatitude index j = ',
+              j, ' = ', rhodustcube[j, :, :, :].max())
 
     DUSTOUT.close()
 
@@ -2214,60 +2346,65 @@ if RTdust_or_gas == 'dust' and recalc_opac == 'Yes':
     # which were written by C. Dullemond, based on the original code by Bohren & Huffman.
 
     logawidth = 0.05          # Smear out the grain size by 5% in both directions
-    na        = 20            # Use 10 grain size samples per bin size
-    chop      = 1.            # Remove forward scattering within an angle of 5 degrees
-    extrapol  = True          # Extrapolate optical constants beyond its wavelength grid, if necessary
-    verbose   = False         # If True, then write out status information
-    ntheta    = 181           # Number of scattering angle sampling points
-    optconstfile = os.path.expanduser(opacity_dir)+'/'+species+'.lnk'    # link to optical constants file
+    na = 20            # Use 10 grain size samples per bin size
+    chop = 1.            # Remove forward scattering within an angle of 5 degrees
+    # Extrapolate optical constants beyond its wavelength grid, if necessary
+    extrapol = True
+    verbose = False         # If True, then write out status information
+    ntheta = 181           # Number of scattering angle sampling points
+    # link to optical constants file
+    optconstfile = os.path.expanduser(opacity_dir)+'/'+species+'.lnk'
 
     # The material density in gram / cm^3
-    graindens = 2.0 # default density in g / cc
+    graindens = 2.0  # default density in g / cc
     if (species == 'mix_2species_porous' or species == 'mix_2species_porous_ice' or species == 'mix_2species_porous_ice70'):
-        graindens = 0.1 # g / cc
+        graindens = 0.1  # g / cc
     if (species == 'mix_2species' or species == 'mix_2species_60silicates_40ice'):
-        graindens = 1.7 # g / cc
+        graindens = 1.7  # g / cc
     if species == 'mix_2species_ice70':
-        graindens = 1.26 # g / cc
+        graindens = 1.26  # g / cc
     if species == 'mix_2species_60silicates_40carbons':
-        graindens = 2.7 # g / cc
+        graindens = 2.7  # g / cc
 
     # Set up a wavelength grid (in cm) upon which we want to compute the opacities
     # 1 micron -> 1 cm
-    lamcm     = 10.0**np.linspace(0,4,200)*1e-4
+    lamcm = 10.0**np.linspace(0, 4, 200)*1e-4
 
     # Set up an angular grid for which we want to compute the scattering matrix Z
-    theta     = np.linspace(0.,180.,ntheta)
+    theta = np.linspace(0., 180., ntheta)
 
     for ibin in range(int(nbin)):
         # median grain size in cm in current bin size:
         if fargo3d == 'No':
-            agraincm = 10.0**(0.5*(np.log10(1e2*bins[ibin]) + np.log10(1e2*bins[ibin+1])))
+            agraincm = 10.0**(0.5*(np.log10(1e2 *
+                              bins[ibin]) + np.log10(1e2*bins[ibin+1])))
         else:
             agraincm = 1e2*dust_size[ibin]
         print('====================')
-        print('bin ', ibin+1,'/',nbin)
-        print('grain size [cm]: ', agraincm, ' with grain density [g/cc] = ', graindens)
+        print('bin ', ibin+1, '/', nbin)
+        print('grain size [cm]: ', agraincm,
+              ' with grain density [g/cc] = ', graindens)
         print('====================')
-        pathout    = species+str(ibin)
-        opac       = compute_opac_mie(optconstfile,graindens,agraincm,lamcm,theta=theta,
-                                      extrapolate=extrapol,logawidth=logawidth,na=na,
-                                      chopforward=chop,verbose=verbose)
+        pathout = species+str(ibin)
+        opac = compute_opac_mie(optconstfile, graindens, agraincm, lamcm, theta=theta,
+                                extrapolate=extrapol, logawidth=logawidth, na=na,
+                                chopforward=chop, verbose=verbose)
         if (scat_mode >= 3):
             print("Writing dust opacities in dustkapscatmat* files")
-            write_radmc3d_scatmat_file(opac,pathout)
+            write_radmc3d_scatmat_file(opac, pathout)
         else:
             print("Writing dust opacities in dustkappa* files")
-            write_radmc3d_kappa_file(opac,pathout)
+            write_radmc3d_kappa_file(opac, pathout)
 else:
     print('------- taking dustkap* opacity files in current directory (recalc_opac = No in params.dat file) ------ ')
 
 # Write dustopac.inp file even if we don't (re)calculate dust opacities
 if RTdust_or_gas == 'dust':
-    write_dustopac(species,nbin)
+    write_dustopac(species, nbin)
     if plot_opac == 'Yes':
         print('--------- plotting dust opacities ----------')
-        plot_opacities(species=species,amin=amin,amax=amax,nbin=nbin,lbda1=wavelength*1e3)
+        plot_opacities(species=species, amin=amin, amax=amax,
+                       nbin=nbin, lbda1=wavelength*1e3)
 
 # write radmc3d script, particularly useful in case radmc3d mctherm /
 # ray_tracing are run on a different platform
@@ -2280,50 +2417,55 @@ write_radmc3d_script()
 if RTdust_or_gas == 'gas' and recalc_density == 'Yes':
     print('--------- computing gas mass volume density ----------')
 
-    gascube = gas.data*(gas.cumass*1e3)/((gas.culength*1e2)**2.)  # nrad, nsec, quantity is in g / cm^2
+    # nrad, nsec, quantity is in g / cm^2
+    gascube = gas.data*(gas.cumass*1e3)/((gas.culength*1e2)**2.)
 
     # Artificially make a cavity devoid of gas (test)
     if cavity_gas == 'Yes':
         imin = np.argmin(np.abs(gas.rmed-0.9))
         axi_cav_gas = 0.0
         for j in range(nsec):
-            axi_cav_gas += gascube[imin,j]
+            axi_cav_gas += gascube[imin, j]
         axi_cav_gas /= nsec
         for i in range(nrad):
             if i < imin:
                 for j in range(nsec):
-                    gascube[i,j] = axi_cav_gas*(gas.rmed[i]/gas.rmed[imin])**(2.0)
+                    gascube[i, j] = axi_cav_gas * \
+                        (gas.rmed[i]/gas.rmed[imin])**(2.0)
 
-    GASOUT = open('numberdens_%s.inp'%gasspecies,'w')
+    GASOUT = open('numberdens_%s.inp' % gasspecies, 'w')
     GASOUT.write('1 \n')                           # iformat
     GASOUT.write(str(nrad*nsec*ncol)+' \n')        # n cells
 
     if lines_mode > 1:
-        GASOUTH2 = open('numberdens_h2.inp','w')
+        GASOUTH2 = open('numberdens_h2.inp', 'w')
         GASOUTH2.write('1 \n')                           # iformat
         GASOUTH2.write(str(nrad*nsec*ncol)+' \n')        # n cells
 
     # array (ncol, nrad, nsec)
-    rhogascubeh2     = np.zeros((ncol,nrad,nsec))      # H2
-    rhogascubeh2_cyl = np.zeros((gas.nver,nrad,nsec))
-    rhogascube       = np.zeros((ncol,nrad,nsec))      # gas species (eg, CO...)
-    rhogascube_cyl   = np.zeros((gas.nver,nrad,nsec))
+    rhogascubeh2 = np.zeros((ncol, nrad, nsec))      # H2
+    rhogascubeh2_cyl = np.zeros((gas.nver, nrad, nsec))
+    rhogascube = np.zeros((ncol, nrad, nsec))      # gas species (eg, CO...)
+    rhogascube_cyl = np.zeros((gas.nver, nrad, nsec))
 
     # gas aspect ratio as function of r (or actually, R, cylindrical radius)
-    hgas = aspectratio * (gas.rmed)**(flaringindex)       # gas aspect ratio (gas.rmed[i] = R in code units)
+    # gas aspect ratio (gas.rmed[i] = R in code units)
+    hgas = aspectratio * (gas.rmed)**(flaringindex)
 
     # Set dust / gas temperature if Tdust_eq_Thydro == 'Yes' (currently default case)
     if Tdust_eq_Thydro == 'Yes':
         print('--------- Writing temperature.inp file (no mctherm) ----------')
-        TEMPOUT = open('gas_temperature.inp','w')
+        TEMPOUT = open('gas_temperature.inp', 'w')
         TEMPOUT.write('1 \n')                           # iformat
         TEMPOUT.write(str(nrad*nsec*ncol)+' \n')        # n cells
-        gas_temp     = np.zeros((ncol,nrad,nsec))
-        gas_temp_cyl = np.zeros((gas.nver,nrad,nsec))
-        thydro = aspectratio*aspectratio*gas.cutemp*gas.rmed**(-1.0+2.0*flaringindex)
+        gas_temp = np.zeros((ncol, nrad, nsec))
+        gas_temp_cyl = np.zeros((gas.nver, nrad, nsec))
+        thydro = aspectratio*aspectratio*gas.cutemp * \
+            gas.rmed**(-1.0+2.0*flaringindex)
         for k in range(nsec):
             for j in range(gas.nver):
-                gas_temp_cyl[j,:,k] = thydro  # only function of R (cylindrical radius)
+                # only function of R (cylindrical radius)
+                gas_temp_cyl[j, :, k] = thydro
         # Now, sweep through the spherical grid
         for j in range(ncol):
             for i in range(nrad):
@@ -2331,15 +2473,16 @@ if RTdust_or_gas == 'gas' and recalc_density == 'Yes':
                 z = gas.rmed[i]*np.cos(gas.tmed[j])  # vertical altitude
                 icyl = np.argmin(np.abs(gas.rmed-R))
                 if R < gas.rmed[icyl] and icyl > 0:
-                    icyl-=1
+                    icyl -= 1
                 jcyl = np.argmin(np.abs(gas.zmed-z))
                 if z < gas.zmed[jcyl] and jcyl > 0:
-                    jcyl-=1
+                    jcyl -= 1
                 if (icyl < nrad-1 and jcyl < gas.nver-1):
-                    gas_temp[j,i,:] = ( gas_temp_cyl[jcyl,icyl,:]*(gas.rmed[icyl+1]-R)*(gas.zmed[jcyl+1]-z) + gas_temp_cyl[jcyl+1,icyl,:]*(gas.rmed[icyl+1]-R)*(z-gas.zmed[jcyl]) + gas_temp_cyl[jcyl,icyl+1,:]*(R-gas.rmed[icyl])*(gas.zmed[jcyl+1]-z) + gas_temp_cyl[jcyl+1,icyl+1,:]*(R-gas.rmed[icyl])*(z-gas.zmed[jcyl]) ) / ( (gas.rmed[icyl+1]-gas.rmed[icyl]) * (gas.zmed[jcyl+1]-gas.zmed[jcyl]) )
+                    gas_temp[j, i, :] = (gas_temp_cyl[jcyl, icyl, :]*(gas.rmed[icyl+1]-R)*(gas.zmed[jcyl+1]-z) + gas_temp_cyl[jcyl+1, icyl, :]*(gas.rmed[icyl+1]-R)*(z-gas.zmed[jcyl]) + gas_temp_cyl[jcyl, icyl+1, :]*(
+                        R-gas.rmed[icyl])*(gas.zmed[jcyl+1]-z) + gas_temp_cyl[jcyl+1, icyl+1, :]*(R-gas.rmed[icyl])*(z-gas.zmed[jcyl])) / ((gas.rmed[icyl+1]-gas.rmed[icyl]) * (gas.zmed[jcyl+1]-gas.zmed[jcyl]))
                 else:
-                # simple nearest-grid point interpolation...
-                    gas_temp[j,i,:] = gas_temp_cyl[jcyl,icyl,:]
+                    # simple nearest-grid point interpolation...
+                    gas_temp[j, i, :] = gas_temp_cyl[jcyl, icyl, :]
                 '''
                 icyl = np.argmin(np.abs(gas.rmed-R))
                 jcyl = np.argmin(np.abs(gas.zmed-z))
@@ -2348,20 +2491,24 @@ if RTdust_or_gas == 'gas' and recalc_density == 'Yes':
         for k in range(nsec):
             for j in range(ncol):
                 for i in range(nrad):
-                    TEMPOUT.write(str(gas_temp[j,i,k])+' \n')
+                    TEMPOUT.write(str(gas_temp[j, i, k])+' \n')
         TEMPOUT.close()
 
     # gas aspect ratio and grid radius as function of r and phi (2D array for each size bin)
-    hg2D = np.zeros((nrad,nsec))
-    r2D  = np.zeros((nrad,nsec))
+    hg2D = np.zeros((nrad, nsec))
+    r2D = np.zeros((nrad, nsec))
     for th in range(nsec):
-        hg2D[:,th] = hgas     # nrad, nsec
-        r2D[:,th] = gas.rmed  # nrad, nsec
+        hg2D[:, th] = hgas     # nrad, nsec
+        r2D[:, th] = gas.rmed  # nrad, nsec
 
     # work out vertical expansion. First, for the array in cylindrical coordinates
     for j in range(gas.nver):
-        rhogascubeh2_cyl[j,:,:] = gascube * np.exp( -0.5*(gas.zmed[j]/hg2D/r2D)**2.0 )            # nver, nrad, nsec
-        rhogascubeh2_cyl[j,:,:] /= ( np.sqrt(2.*pi) * r2D * hg2D  * gas.culength*1e2 * 2.3*mp )   # quantity is now in cm^-3
+        # nver, nrad, nsec
+        rhogascubeh2_cyl[j, :, :] = gascube * \
+            np.exp(-0.5*(gas.zmed[j]/hg2D/r2D)**2.0)
+        # quantity is now in cm^-3
+        rhogascubeh2_cyl[j, :, :] /= (np.sqrt(2.*pi)
+                                      * r2D * hg2D * gas.culength*1e2 * 2.3*mp)
 
     # multiply by constant abundance ratio
     rhogascube_cyl = rhogascubeh2_cyl*abundance
@@ -2374,13 +2521,17 @@ if RTdust_or_gas == 'gas' and recalc_density == 'Yes':
             for j in range(gas.nver):
                 for i in range(nrad):
                     # all relevant quantities below are in in cgs
-                    chip = 0.5 *  math.erfc(gas.zmed[j]/np.sqrt(2.0)/hgas[i]/gas.rmed[i]) * gascube[i,k] / (2.3*mp)
-                    chim = 0.5 * math.erfc(-gas.zmed[j]/np.sqrt(2.0)/hgas[i]/gas.rmed[i]) * gascube[i,k] / (2.3*mp)
+                    chip = 0.5 * \
+                        math.erfc(gas.zmed[j]/np.sqrt(2.0)/hgas[i] /
+                                  gas.rmed[i]) * gascube[i, k] / (2.3*mp)
+                    chim = 0.5 * \
+                        math.erfc(-gas.zmed[j]/np.sqrt(2.0)/hgas[i] /
+                                  gas.rmed[i]) * gascube[i, k] / (2.3*mp)
                     if (photodissociation == 'Yes' and (chip < 1e21 or chim < 1e21)):
-                        rhogascube_cyl[j,i,k] *= 1e-5
+                        rhogascube_cyl[j, i, k] *= 1e-5
                 # Simple modelling of freezeout: drop CO abundance
-                    if freezeout == 'Yes' and gas_temp_cyl[j,i,k] < 19.0:
-                        rhogascube_cyl[j,i,k] *= 1e-5
+                    if freezeout == 'Yes' and gas_temp_cyl[j, i, k] < 19.0:
+                        rhogascube_cyl[j, i, k] *= 1e-5
 
     # then, sweep through the spherical grid
     for j in range(ncol):
@@ -2389,26 +2540,27 @@ if RTdust_or_gas == 'gas' and recalc_density == 'Yes':
             z = gas.rmed[i]*np.cos(gas.tmed[j])  # vertical altitude
             icyl = np.argmin(np.abs(gas.rmed-R))
             if R < gas.rmed[icyl] and icyl > 0:
-                icyl-=1
+                icyl -= 1
             jcyl = np.argmin(np.abs(gas.zmed-z))
             if z < gas.zmed[jcyl] and jcyl > 0:
-                jcyl-=1
+                jcyl -= 1
             if (icyl < nrad-1 and jcyl < gas.nver-1):
-                rhogascube[j,i,:] = ( rhogascube_cyl[jcyl,icyl,:]*(gas.rmed[icyl+1]-R)*(gas.zmed[jcyl+1]-z) + rhogascube_cyl[jcyl+1,icyl,:]*(gas.rmed[icyl+1]-R)*(z-gas.zmed[jcyl]) + rhogascube_cyl[jcyl,icyl+1,:]*(R-gas.rmed[icyl])*(gas.zmed[jcyl+1]-z) + rhogascube_cyl[jcyl+1,icyl+1,:]*(R-gas.rmed[icyl])*(z-gas.zmed[jcyl]) ) / ( (gas.rmed[icyl+1]-gas.rmed[icyl]) * (gas.zmed[jcyl+1]-gas.zmed[jcyl]) )
-                rhogascubeh2[j,i,:] = ( rhogascubeh2_cyl[jcyl,icyl,:]*(gas.rmed[icyl+1]-R)*(gas.zmed[jcyl+1]-z) + rhogascubeh2_cyl[jcyl+1,icyl,:]*(gas.rmed[icyl+1]-R)*(z-gas.zmed[jcyl]) + rhogascubeh2_cyl[jcyl,icyl+1,:]*(R-gas.rmed[icyl])*(gas.zmed[jcyl+1]-z) + rhogascubeh2_cyl[jcyl+1,icyl+1,:]*(R-gas.rmed[icyl])*(z-gas.zmed[jcyl]) ) / ( (gas.rmed[icyl+1]-gas.rmed[icyl]) * (gas.zmed[jcyl+1]-gas.zmed[jcyl]) )
+                rhogascube[j, i, :] = (rhogascube_cyl[jcyl, icyl, :]*(gas.rmed[icyl+1]-R)*(gas.zmed[jcyl+1]-z) + rhogascube_cyl[jcyl+1, icyl, :]*(gas.rmed[icyl+1]-R)*(z-gas.zmed[jcyl]) + rhogascube_cyl[jcyl, icyl+1, :]*(
+                    R-gas.rmed[icyl])*(gas.zmed[jcyl+1]-z) + rhogascube_cyl[jcyl+1, icyl+1, :]*(R-gas.rmed[icyl])*(z-gas.zmed[jcyl])) / ((gas.rmed[icyl+1]-gas.rmed[icyl]) * (gas.zmed[jcyl+1]-gas.zmed[jcyl]))
+                rhogascubeh2[j, i, :] = (rhogascubeh2_cyl[jcyl, icyl, :]*(gas.rmed[icyl+1]-R)*(gas.zmed[jcyl+1]-z) + rhogascubeh2_cyl[jcyl+1, icyl, :]*(gas.rmed[icyl+1]-R)*(z-gas.zmed[jcyl]) + rhogascubeh2_cyl[jcyl, icyl+1, :]*(
+                    R-gas.rmed[icyl])*(gas.zmed[jcyl+1]-z) + rhogascubeh2_cyl[jcyl+1, icyl+1, :]*(R-gas.rmed[icyl])*(z-gas.zmed[jcyl])) / ((gas.rmed[icyl+1]-gas.rmed[icyl]) * (gas.zmed[jcyl+1]-gas.zmed[jcyl]))
             else:
-            # simple nearest-grid point interpolation...
-                rhogascube[j,i,:] = rhogascube_cyl[jcyl,icyl,:]
-                rhogascubeh2[j,i,:] = rhogascubeh2_cyl[jcyl,icyl,:]
-
+                # simple nearest-grid point interpolation...
+                rhogascube[j, i, :] = rhogascube_cyl[jcyl, icyl, :]
+                rhogascubeh2[j, i, :] = rhogascubeh2_cyl[jcyl, icyl, :]
 
     print('--------- Writing numberdens.inp file ----------')
     for k in range(nsec):
         for j in range(ncol):
             for i in range(nrad):
-                GASOUT.write(str(rhogascube[j,i,k])+' \n')
+                GASOUT.write(str(rhogascube[j, i, k])+' \n')
                 if lines_mode > 1:
-                    GASOUTH2.write(str(rhogascubeh2[j,i,k])+' \n')
+                    GASOUTH2.write(str(rhogascubeh2[j, i, k])+' \n')
     GASOUT.close()
     if lines_mode > 1:
         GASOUTH2.close()
@@ -2417,37 +2569,40 @@ if RTdust_or_gas == 'gas' and recalc_density == 'Yes':
     if plot_density == 'Yes':
         from mpl_toolkits.axes_grid1 import make_axes_locatable
         import matplotlib.ticker as ticker
-        from matplotlib.ticker import (MultipleLocator, FormatStrFormatter, AutoMinorLocator, LogLocator, LogFormatter)
+        from matplotlib.ticker import (
+            MultipleLocator, FormatStrFormatter, AutoMinorLocator, LogLocator, LogFormatter)
         matplotlib.rcParams.update({'font.size': 20})
         matplotlib.rc('font', family='Arial')
-        fontcolor='white'
+        fontcolor = 'white'
         print('--------- plotting density(R,theta) ----------')
-        axidensh2 = np.zeros((ncol,nrad))
-        axidens   = np.zeros((ncol,nrad))
+        axidensh2 = np.zeros((ncol, nrad))
+        axidens = np.zeros((ncol, nrad))
         for j in range(ncol):
             for i in range(nrad):
                 for k in range(nsec):
-                    axidens[j,i]   += rhogascube[j,i,k]
-                    axidensh2[j,i] += rhogascubeh2[j,i,k]
-                axidens[j,i]   /= (nsec+0.0)
-                axidensh2[j,i] /= (nsec+0.0)
-        X = gas.rmed*gas.culength/1.5e11 # in au
+                    axidens[j, i] += rhogascube[j, i, k]
+                    axidensh2[j, i] += rhogascubeh2[j, i, k]
+                axidens[j, i] /= (nsec+0.0)
+                axidensh2[j, i] /= (nsec+0.0)
+        X = gas.rmed*gas.culength/1.5e11  # in au
         Y = gas.tmed
-        fig = plt.figure(figsize=(8.,8.))
+        fig = plt.figure(figsize=(8., 8.))
         plt.subplots_adjust(left=0.12, right=0.94, top=0.88, bottom=0.11)
         ax = plt.gca()
         ax.set_ylabel('latitude [rad]')
         ax.set_xlabel('radius [code units]')
-        ax.tick_params(top='on', right='on', length = 5, width=1.0, direction='out')
+        ax.tick_params(top='on', right='on', length=5,
+                       width=1.0, direction='out')
         ax.tick_params(axis='x', which='minor', top=True)
         ax.tick_params(axis='y', which='minor', right=True)
         mynorm = matplotlib.colors.LogNorm()
         vmin = axidens.min()
         vmax = axidens.max()
-        CF = ax.pcolormesh(X,Y,axidens,cmap=mycolormap,vmin=vmin,vmax=vmax,norm=mynorm)
+        CF = ax.pcolormesh(X, Y, axidens, cmap=mycolormap,
+                           vmin=vmin, vmax=vmax, norm=mynorm)
         divider = make_axes_locatable(ax)
         cax = divider.append_axes("top", size="2.5%", pad=0.12)
-        cb =  plt.colorbar(CF, cax=cax, orientation='horizontal')
+        cb = plt.colorbar(CF, cax=cax, orientation='horizontal')
         cax.xaxis.tick_top()
         cax.xaxis.set_tick_params(labelsize=20, direction='out')
         cax.xaxis.set_major_locator(ticker.LogLocator(base=10.0, numticks=10))
@@ -2469,16 +2624,18 @@ if RTdust_or_gas == 'gas' and recalc_density == 'Yes':
         plt.savefig('./'+fileout, dpi=160)
         # plot h2 number density if non-LTE transfer
         if lines_mode > 1:
-            fig = plt.figure(figsize=(8.,8.))
+            fig = plt.figure(figsize=(8., 8.))
             plt.subplots_adjust(left=0.12, right=0.94, top=0.88, bottom=0.11)
             ax = plt.gca()
-            CF = ax.pcolormesh(X,Y,axidensh2,cmap=mycolormap,vmin=axidensh2.min(),vmax=axidensh2.max(),norm=mynorm)
+            CF = ax.pcolormesh(X, Y, axidensh2, cmap=mycolormap,
+                               vmin=axidensh2.min(), vmax=axidensh2.max(), norm=mynorm)
             divider = make_axes_locatable(ax)
             cax = divider.append_axes("top", size="2.5%", pad=0.12)
-            cb =  plt.colorbar(CF, cax=cax, orientation='horizontal')
+            cb = plt.colorbar(CF, cax=cax, orientation='horizontal')
             cax.xaxis.tick_top()
             cax.xaxis.set_tick_params(labelsize=20, direction='out')
-            cax.xaxis.set_major_locator(ticker.LogLocator(base=10.0, numticks=10))
+            cax.xaxis.set_major_locator(
+                ticker.LogLocator(base=10.0, numticks=10))
             cax.xaxis.set_label_position('top')
             cax.set_xlabel('H2 abundance '+r'[cm$^{-3}$]')
             cax.xaxis.labelpad = 8
@@ -2487,16 +2644,17 @@ if RTdust_or_gas == 'gas' and recalc_density == 'Yes':
 
     # print max of gas mass volume density at each colatitude
     for j in range(ncol):
-        print('max(rho_dustcube) for gas species at colatitude index j = ', j, ' = ', rhogascube[j,:,:].max())
+        print('max(rho_dustcube) for gas species at colatitude index j = ',
+              j, ' = ', rhogascube[j, :, :].max())
 
     # free RAM memory
-    del rhogascube,rhogascubeh2,rhogascube_cyl,rhogascubeh2_cyl
+    del rhogascube, rhogascubeh2, rhogascube_cyl, rhogascubeh2_cyl
 
     # Microturbulent line broadening
-    MTURB = open('microturbulence.inp','w')
+    MTURB = open('microturbulence.inp', 'w')
     MTURB.write('1 \n')                           # iformat
     MTURB.write(str(nrad*nsec*ncol)+' \n')        # n cells
-    microturb = np.zeros((ncol,nrad,nsec))
+    microturb = np.zeros((ncol, nrad, nsec))
 
     if turbvel == 'cavity':
         for k in range(nsec):
@@ -2507,50 +2665,60 @@ if RTdust_or_gas == 'gas' and recalc_density == 'Yes':
                     else:
                         myalpha = 3e-4   # outside cavity
                     # v_turb ~ sqrt(alpha) x isothermal sound speed
-                    microturb[j,i,k] = np.sqrt(myalpha * kB * gas_temp[j,i,k] / 2.3 / mp)
-                    MTURB.write(str(microturb[j,i,k])+' \n')
-        print('min and max of microturbulent velocity in cm/s = ',microturb.min(),microturb.max())
+                    microturb[j, i, k] = np.sqrt(
+                        myalpha * kB * gas_temp[j, i, k] / 2.3 / mp)
+                    MTURB.write(str(microturb[j, i, k])+' \n')
+        print('min and max of microturbulent velocity in cm/s = ',
+              microturb.min(), microturb.max())
     else:
         for k in range(nsec):
             for j in range(ncol):
                 for i in range(nrad):
-                    microturb[j,i,k] = turbvel*1.0e2          # ncol, nrad, nsec in cm/s
-                    MTURB.write(str(microturb[j,i,k])+' \n')
+                    # ncol, nrad, nsec in cm/s
+                    microturb[j, i, k] = turbvel*1.0e2
+                    MTURB.write(str(microturb[j, i, k])+' \n')
     MTURB.close()
 
     # gas velocity field
     if fargo3d == 'Yes':
-        vtheta3D  = Field(field='gasvz'+str(on)+'.dat', directory=dir).data  # code units
-        vtheta3D *= (gas.culength*1e2)/(gas.cutime) #cm/s
-        vrad3D    = Field(field='gasvy'+str(on)+'.dat', directory=dir).data  # code units
-        vrad3D   *= (gas.culength*1e2)/(gas.cutime) #cm/s
-        vphi3D    = Field(field='gasvx'+str(on)+'.dat', directory=dir).data  # code units
-        f1, xpla, ypla, f4, f5, f6, f7, f8, date, omega = np.loadtxt(dir+"/planet0.dat",unpack=True)
+        vtheta3D = Field(field='gasvz'+str(on)+'.dat',
+                         directory=dir).data  # code units
+        vtheta3D *= (gas.culength*1e2)/(gas.cutime)  # cm/s
+        vrad3D = Field(field='gasvy'+str(on)+'.dat',
+                       directory=dir).data  # code units
+        vrad3D *= (gas.culength*1e2)/(gas.cutime)  # cm/s
+        vphi3D = Field(field='gasvx'+str(on)+'.dat',
+                       directory=dir).data  # code units
+        f1, xpla, ypla, f4, f5, f6, f7, f8, date, omega = np.loadtxt(
+            dir+"/planet0.dat", unpack=True)
         omegaframe = omega[on]
         print('OMEGAFRAME = ', omegaframe)
         for theta in range(ncol):
             for phi in range(nsec):
-                vphi3D[theta,:,phi] += gas.rmed*omegaframe
-        vphi3D   *= (gas.culength*1e2)/(gas.cutime) #cm/s
+                vphi3D[theta, :, phi] += gas.rmed*omegaframe
+        vphi3D *= (gas.culength*1e2)/(gas.cutime)  # cm/s
     else:
-        vrad3D_cyl   = np.zeros((gas.nver,nrad,nsec))   # zeros!
-        vphi3D_cyl   = np.zeros((gas.nver,nrad,nsec))   # zeros!
-        vtheta3D     = np.zeros((ncol,nrad,nsec))   # zeros!
-        vrad3D       = np.zeros((ncol,nrad,nsec))   # zeros!
-        vphi3D       = np.zeros((ncol,nrad,nsec))   # zeros!
-        vrad2D   = Field(field='gasvrad'+str(on)+'.dat', directory=dir).data  # code units
-        vrad2D   *= (gas.culength*1e2)/(gas.cutime) #cm/s
-        vphi2D   = Field(field='gasvtheta'+str(on)+'.dat', directory=dir).data  # code units
-        f1, xpla, ypla, f4, f5, f6, f7, date, omega, f10, f11 = np.loadtxt(dir+"/planet0.dat",unpack=True)
+        vrad3D_cyl = np.zeros((gas.nver, nrad, nsec))   # zeros!
+        vphi3D_cyl = np.zeros((gas.nver, nrad, nsec))   # zeros!
+        vtheta3D = np.zeros((ncol, nrad, nsec))   # zeros!
+        vrad3D = np.zeros((ncol, nrad, nsec))   # zeros!
+        vphi3D = np.zeros((ncol, nrad, nsec))   # zeros!
+        vrad2D = Field(field='gasvrad'+str(on)+'.dat',
+                       directory=dir).data  # code units
+        vrad2D *= (gas.culength*1e2)/(gas.cutime)  # cm/s
+        vphi2D = Field(field='gasvtheta'+str(on)+'.dat',
+                       directory=dir).data  # code units
+        f1, xpla, ypla, f4, f5, f6, f7, date, omega, f10, f11 = np.loadtxt(
+            dir+"/planet0.dat", unpack=True)
         omegaframe = omega[on]
         print('OMEGAFRAME = ', omegaframe)
         for phi in range(nsec):
-            vphi2D[:,phi] += gas.rmed*omegaframe
-        vphi2D   *= (gas.culength*1e2)/(gas.cutime) #cm/s
+            vphi2D[:, phi] += gas.rmed*omegaframe
+        vphi2D *= (gas.culength*1e2)/(gas.cutime)  # cm/s
         # Vertical expansion for vrad and vphi (vtheta being assumed zero)
         for z in range(gas.nver):
-            vrad3D_cyl[z,:,:] = vrad2D
-            vphi3D_cyl[z,:,:] = vphi2D
+            vrad3D_cyl[z, :, :] = vrad2D
+            vphi3D_cyl[z, :, :] = vphi2D
         # Now, sweep through the spherical grid
         for j in range(ncol):
             for i in range(nrad):
@@ -2558,25 +2726,28 @@ if RTdust_or_gas == 'gas' and recalc_density == 'Yes':
                 z = gas.rmed[i]*np.cos(gas.tmed[j])  # vertical altitude
                 icyl = np.argmin(np.abs(gas.rmed-R))
                 if R < gas.rmed[icyl] and icyl > 0:
-                    icyl-=1
+                    icyl -= 1
                 jcyl = np.argmin(np.abs(gas.zmed-z))
                 if z < gas.zmed[jcyl] and jcyl > 0:
-                    jcyl-=1
+                    jcyl -= 1
                 if (icyl < nrad-1 and jcyl < gas.nver-1):
-                    vrad3D[j,i,:] = ( vrad3D_cyl[jcyl,icyl,:]*(gas.rmed[icyl+1]-R)*(gas.zmed[jcyl+1]-z) + vrad3D_cyl[jcyl+1,icyl,:]*(gas.rmed[icyl+1]-R)*(z-gas.zmed[jcyl]) + vrad3D_cyl[jcyl,icyl+1,:]*(R-gas.rmed[icyl])*(gas.zmed[jcyl+1]-z) + vrad3D_cyl[jcyl+1,icyl+1,:]*(R-gas.rmed[icyl])*(z-gas.zmed[jcyl]) ) / ( (gas.rmed[icyl+1]-gas.rmed[icyl]) * (gas.zmed[jcyl+1]-gas.zmed[jcyl]) )
-                    vphi3D[j,i,:] = ( vphi3D_cyl[jcyl,icyl,:]*(gas.rmed[icyl+1]-R)*(gas.zmed[jcyl+1]-z) + vphi3D_cyl[jcyl+1,icyl,:]*(gas.rmed[icyl+1]-R)*(z-gas.zmed[jcyl]) + vphi3D_cyl[jcyl,icyl+1,:]*(R-gas.rmed[icyl])*(gas.zmed[jcyl+1]-z) + vphi3D_cyl[jcyl+1,icyl+1,:]*(R-gas.rmed[icyl])*(z-gas.zmed[jcyl]) ) / ( (gas.rmed[icyl+1]-gas.rmed[icyl]) * (gas.zmed[jcyl+1]-gas.zmed[jcyl]) )
+                    vrad3D[j, i, :] = (vrad3D_cyl[jcyl, icyl, :]*(gas.rmed[icyl+1]-R)*(gas.zmed[jcyl+1]-z) + vrad3D_cyl[jcyl+1, icyl, :]*(gas.rmed[icyl+1]-R)*(z-gas.zmed[jcyl]) + vrad3D_cyl[jcyl, icyl+1, :]*(
+                        R-gas.rmed[icyl])*(gas.zmed[jcyl+1]-z) + vrad3D_cyl[jcyl+1, icyl+1, :]*(R-gas.rmed[icyl])*(z-gas.zmed[jcyl])) / ((gas.rmed[icyl+1]-gas.rmed[icyl]) * (gas.zmed[jcyl+1]-gas.zmed[jcyl]))
+                    vphi3D[j, i, :] = (vphi3D_cyl[jcyl, icyl, :]*(gas.rmed[icyl+1]-R)*(gas.zmed[jcyl+1]-z) + vphi3D_cyl[jcyl+1, icyl, :]*(gas.rmed[icyl+1]-R)*(z-gas.zmed[jcyl]) + vphi3D_cyl[jcyl, icyl+1, :]*(
+                        R-gas.rmed[icyl])*(gas.zmed[jcyl+1]-z) + vphi3D_cyl[jcyl+1, icyl+1, :]*(R-gas.rmed[icyl])*(z-gas.zmed[jcyl])) / ((gas.rmed[icyl+1]-gas.rmed[icyl]) * (gas.zmed[jcyl+1]-gas.zmed[jcyl]))
                 else:
-                # simple nearest-grid point interpolation...
-                    vrad3D[j,i,:] = vrad3D_cyl[jcyl,icyl,:]
-                    vphi3D[j,i,:] = vphi3D_cyl[jcyl,icyl,:]
+                    # simple nearest-grid point interpolation...
+                    vrad3D[j, i, :] = vrad3D_cyl[jcyl, icyl, :]
+                    vphi3D[j, i, :] = vphi3D_cyl[jcyl, icyl, :]
 
-    GASVEL = open('gas_velocity.inp','w')
+    GASVEL = open('gas_velocity.inp', 'w')
     GASVEL.write('1 \n')                           # iformat
     GASVEL.write(str(nrad*nsec*ncol)+' \n')        # n cells
     for k in range(nsec):
         for j in range(ncol):
             for i in range(nrad):
-                GASVEL.write(str(vrad3D[j,i,k])+' '+str(vtheta3D[j,i,k])+' '+str(vphi3D[j,i,k])+' \n')
+                GASVEL.write(
+                    str(vrad3D[j, i, k])+' '+str(vtheta3D[j, i, k])+' '+str(vphi3D[j, i, k])+' \n')
     GASVEL.close()
 
     del vrad3D, vphi3D, vtheta3D, vrad3D_cyl, vphi3D_cyl
@@ -2592,42 +2763,46 @@ if (recalc_radmc == 'Yes' or recalc_rawfits == 'Yes'):
     # need to check why we need to output wavelength...
     if recalc_rawfits == 'No':
         write_wavelength()
-        write_stars(Rstar = rstar, Tstar = teff)
+        write_stars(Rstar=rstar, Tstar=teff)
         # Write 3D spherical grid for RT computational calculation
         write_AMRgrid(gas, Plot=False)
         if RTdust_or_gas == 'gas':
-            write_lines(str(gasspecies),lines_mode)
+            write_lines(str(gasspecies), lines_mode)
         # rto_style = 3 means that RADMC3D will write binary output files
         # setthreads corresponds to the number of threads (cores) over which radmc3d runs
-        write_radmc3dinp(incl_dust=incl_dust, incl_lines=incl_lines, lines_mode=lines_mode, nphot_scat=nb_photons_scat, nphot=nb_photons, rto_style=3, tgas_eq_tdust=tgas_eq_tdust, modified_random_walk=1, scattering_mode_max=scat_mode, setthreads=nbcores)
+        write_radmc3dinp(incl_dust=incl_dust, incl_lines=incl_lines, lines_mode=lines_mode, nphot_scat=nb_photons_scat, nphot=nb_photons,
+                         rto_style=3, tgas_eq_tdust=tgas_eq_tdust, modified_random_walk=1, scattering_mode_max=scat_mode, setthreads=nbcores)
 
     # Add 90 degrees to position angle so that RADMC3D's definition of
     # position angle be consistent with observed position
     # angle, which is what we enter in the params.dat file
-    M = RTmodel(distance=distance, Lambda=wavelength*1e3, label=label, line=gasspecies, iline=iline, vkms=vkms, widthkms=widthkms, npix=nbpixels, phi=phiangle, incl=inclination, posang=posangle+90.0)
+    M = RTmodel(distance=distance, Lambda=wavelength*1e3, label=label, line=gasspecies, iline=iline,
+                vkms=vkms, widthkms=widthkms, npix=nbpixels, phi=phiangle, incl=inclination, posang=posangle+90.0)
 
     # Set dust / gas temperature if Tdust_eq_Thydro == 'Yes'
     if recalc_rawfits == 'No' and Tdust_eq_Thydro == 'Yes' and RTdust_or_gas == 'dust' and recalc_temperature == 'Yes':
         print('--------- Writing temperature file (no mctherm) ----------')
         os.system('rm -f dust_temperature.bdat')        # avoid confusion!...
-        TEMPOUT = open('dust_temperature.dat','w')
+        TEMPOUT = open('dust_temperature.dat', 'w')
         TEMPOUT.write('1 \n')                           # iformat
         TEMPOUT.write(str(nrad*nsec*ncol)+' \n')        # n cells
         TEMPOUT.write(str(int(nbin))+' \n')             # nbin size bins
 
-        gas_temp = np.zeros((ncol,nrad,nsec))
-        thydro = aspectratio*aspectratio*gas.cutemp*gas.rmed**(-1.0+2.0*flaringindex)
+        gas_temp = np.zeros((ncol, nrad, nsec))
+        thydro = aspectratio*aspectratio*gas.cutemp * \
+            gas.rmed**(-1.0+2.0*flaringindex)
         for k in range(nsec):
             for j in range(ncol):
-                gas_temp[j,:,k] = thydro
+                gas_temp[j, :, k] = thydro
 
         # write dust temperature for all size bins
         for ibin in range(nbin):
-            print('writing temperature of dust species in bin', ibin, 'out of ',nbin-1)
+            print('writing temperature of dust species in bin',
+                  ibin, 'out of ', nbin-1)
             for k in range(nsec):
                 for j in range(ncol):
                     for i in range(nrad):
-                        TEMPOUT.write(str(gas_temp[j,i,k])+' \n')
+                        TEMPOUT.write(str(gas_temp[j, i, k])+' \n')
         TEMPOUT.close()
         del gas_temp
         if RTdust_or_gas == 'gas' and Tdust_eq_Thydro == 'Yes':
@@ -2646,39 +2821,41 @@ if (recalc_radmc == 'Yes' or recalc_rawfits == 'Yes'):
         if RTdust_or_gas == 'dust':
             Temp = np.fromfile('dust_temperature.bdat', dtype='float64')
             Temp = Temp[4:]
-            Temp = Temp.reshape(nbin,nsec,ncol,nrad)
+            Temp = Temp.reshape(nbin, nsec, ncol, nrad)
             # Keep temperature of the largest dust species
-            Temp = Temp[-1,:,:,:]
+            Temp = Temp[-1, :, :, :]
         else:
             f = open('gas_temperature.inp', 'r')
             Temp = np.genfromtxt(f)
             Temp = Temp[2:]
-            Temp = Temp.reshape(nsec,ncol,nrad)
+            Temp = Temp.reshape(nsec, ncol, nrad)
         # Temperature in the midplane (ncol/2 given that the grid extends on both sides about the midplane)
         # not really in the midplane because theta=pi/2 is an edge colatitude...
-        Tm = Temp[:,ncol//2,:]
+        Tm = Temp[:, ncol//2, :]
         # Temperature at one surface
-        Ts = Temp[:,0,:]
+        Ts = Temp[:, 0, :]
         # Azimuthally-averaged radial profiles
-        axiTm = np.sum(Tm,axis=0)/nsec
-        axiTs = np.sum(Ts,axis=0)/nsec
-        fig = plt.figure(figsize=(4.,3.))
+        axiTm = np.sum(Tm, axis=0)/nsec
+        axiTs = np.sum(Ts, axis=0)/nsec
+        fig = plt.figure(figsize=(4., 3.))
         ax = fig.gca()
         S = gas.rmed*gas.culength/1.5e11  # radius in a.u.
         # gas temperature in hydro simulation in Kelvin (assuming T in R^-1/2, no matter
         # the value of the gas flaring index in the simulation)
-        Tm_model = aspectratio*aspectratio*gas.cutemp*gas.rmed**(-1.0+2.0*flaringindex)
+        Tm_model = aspectratio*aspectratio * \
+            gas.cutemp*gas.rmed**(-1.0+2.0*flaringindex)
         ax.plot(S, axiTm, 'bo', markersize=1., label='midplane')
         ax.plot(S, Tm_model, 'b--', markersize=1., label='midplane hydro')
         ax.plot(S, axiTs, 'rs', markersize=1., label='surface')
         ax.set_xlabel(r'$R ({\rm au})$', fontsize=12)
         ax.set_ylabel(r'$T ({\rm K})$', fontsize=12)
-        #ax.set_xlim(20.0, 100.0) # cuidadin!
+        # ax.set_xlim(20.0, 100.0) # cuidadin!
         ax.set_xlim(S.min(), S.max())
-        #ax.set_ylim(10.0, 150.0)  # cuidadin!
+        # ax.set_ylim(10.0, 150.0)  # cuidadin!
         ax.set_ylim(Tm.min(), Ts.max())
         ax.tick_params(axis='both', direction='in', top='on', right='on')
-        ax.tick_params(axis='both', which='minor', top='on', right='on', direction='in')
+        ax.tick_params(axis='both', which='minor',
+                       top='on', right='on', direction='in')
         ax.get_xaxis().set_major_formatter(matplotlib.ticker.ScalarFormatter())
         ax.legend(frameon=False)
         fig.add_subplot(ax)
@@ -2687,12 +2864,14 @@ if (recalc_radmc == 'Yes' or recalc_rawfits == 'Yes'):
         fig.clf()
         # Save radial profiles in an ascii file
         filenameT2 = 'T_R_'+label+'.dat'
-        TEMPOUT=open(filenameT2,'w')
-        TEMPOUT.write('# radius [au] \t T_midplane_radmc3d \t T_surface_radmc3d \t T_midplane_hydro\n')
+        TEMPOUT = open(filenameT2, 'w')
+        TEMPOUT.write(
+            '# radius [au] \t T_midplane_radmc3d \t T_surface_radmc3d \t T_midplane_hydro\n')
         for i in range(nrad):
-            TEMPOUT.write('%f \t %f \t %f \t %f\n' %(S[i],axiTm[i],axiTs[i],Tm_model[i]))
+            TEMPOUT.write('%f \t %f \t %f \t %f\n' %
+                          (S[i], axiTm[i], axiTs[i], Tm_model[i]))
         TEMPOUT.close()
-            # free RAM memory
+        # free RAM memory
         del Temp
 else:
     print('------- I did not run RADMC3D, using existing .fits file for convolution ')
@@ -2700,9 +2879,11 @@ else:
 
     if RTdust_or_gas == 'gas':
         # no need for lambda in file's name for gas RT calculations...
-        outfile = 'image_'+str(label)+'_i'+str(inclination)+'_phi'+str(phiangle)+'_PA'+str(posangle)
+        outfile = 'image_'+str(label)+'_i'+str(inclination) + \
+            '_phi'+str(phiangle)+'_PA'+str(posangle)
     if RTdust_or_gas == 'dust':
-        outfile = 'image_'+str(label)+'_lbda'+str(wavelength)+'_i'+str(inclination)+'_phi'+str(phiangle)+'_PA'+str(posangle)
+        outfile = 'image_'+str(label)+'_lbda'+str(wavelength)+'_i' + \
+            str(inclination)+'_phi'+str(phiangle)+'_PA'+str(posangle)
 
     if secondorder == 'Yes':
         outfile = outfile+'_so'
@@ -2746,23 +2927,26 @@ if recalc_fluxmap == 'Yes':
         ny = hdr['NAXIS2']
         raw_intensity = f[0].data
         if (recalc_radmc == 'No' and plot_tau == 'No'):
-            print("Total flux [Jy] = "+str(np.sum(raw_intensity)))   # sum over pixels
+            # sum over pixels
+            print("Total flux [Jy] = "+str(np.sum(raw_intensity)))
         # check beam is correctly handled by inserting a source point at the
         # origin of the raw intensity image
         if check_beam == 'Yes':
-            raw_intensity[:,:] = 0.0
-            raw_intensity[nx//2-1,ny//2-1] = 1.0
+            raw_intensity[:, :] = 0.0
+            raw_intensity[nx//2-1, ny//2-1] = 1.0
         # Add white (Gaussian) noise to raw flux image to simulate effects of 'thermal' noise
         if (add_noise == 'Yes' and RTdust_or_gas == 'dust' and plot_tau == 'No'):
             # beam area in pixel^2
-            beam =  (np.pi/(4.*np.log(2.)))*bmaj*bmin/(cdelt**2.)
+            beam = (np.pi/(4.*np.log(2.)))*bmaj*bmin/(cdelt**2.)
             # noise standard deviation in Jy per pixel (I've checked the expression below works well)
-            noise_dev_std_Jy_per_pixel = noise_dev_std / np.sqrt(0.5*beam)  # 1D
+            noise_dev_std_Jy_per_pixel = noise_dev_std / \
+                np.sqrt(0.5*beam)  # 1D
             # noise array
-            noise_array = np.random.normal(0.0,noise_dev_std_Jy_per_pixel,size=nbpixels*nbpixels)
-            noise_array = noise_array.reshape(nbpixels,nbpixels)
+            noise_array = np.random.normal(
+                0.0, noise_dev_std_Jy_per_pixel, size=nbpixels*nbpixels)
+            noise_array = noise_array.reshape(nbpixels, nbpixels)
             raw_intensity += noise_array
-        if brightness_temp=='Yes':
+        if brightness_temp == 'Yes':
             # beware that all units are in cgs! We need to convert
             # 'intensity' from Jy/pixel to cgs units!
             # pixel size in each direction in cm
@@ -2773,46 +2957,48 @@ if recalc_fluxmap == 'Yes':
             # convert intensity from Jy/pixel to erg/s/cm2/Hz/sr
             intensity_buf = raw_intensity/1e23/pixsurf_ster
             # beware that lbda0 is in mm right now, we need to have it in cm in the expression below
-            raw_intensity = (h*c/kB/(lbda0*1e-1))/np.log(1.+2.*h*c/intensity_buf/pow((lbda0*1e-1),3.))
+            raw_intensity = (h*c/kB/(lbda0*1e-1))/np.log(1. +
+                                                         2.*h*c/intensity_buf/pow((lbda0*1e-1), 3.))
             #raw_intensity = np.nan_to_num(raw_intensity)
-
 
     # b) case with polarized scattering: fits file contains raw Stokes vectors
     if RTdust_or_gas == 'dust' and polarized_scat == 'Yes':
         cube = f[0].data
-        Q = cube[1,:,:]
-        U = cube[2,:,:]
+        Q = cube[1, :, :]
+        U = cube[2, :, :]
         #I = cube[0,:,:]
         #P = cube[4,:,:]
         (nx, ny) = Q.shape
         # define theta angle for calculation of Q_phi below (Avenhaus+ 14)
-        x = np.arange(1,nx+1)
-        y = np.arange(1,ny+1)
-        XXs,YYs = np.meshgrid(x,y)
+        x = np.arange(1, nx+1)
+        y = np.arange(1, ny+1)
+        XXs, YYs = np.meshgrid(x, y)
         X0 = nx/2-1
         Y0 = ny/2-1
         rrs = np.sqrt((XXs-X0)**2+(YYs-Y0)**2)
-        theta = np.arctan2(-(XXs-X0),(YYs-Y0)) # notice atan(x/y)
+        theta = np.arctan2(-(XXs-X0), (YYs-Y0))  # notice atan(x/y)
         if add_noise == 'Yes':
             # add noise to Q and U Stokes arrays
             # noise array
-            noise_array_Q = np.random.normal(0.0,0.01*Q.max(),size=nbpixels*nbpixels)
-            noise_array_Q = noise_array_Q.reshape(nbpixels,nbpixels)
+            noise_array_Q = np.random.normal(
+                0.0, 0.01*Q.max(), size=nbpixels*nbpixels)
+            noise_array_Q = noise_array_Q.reshape(nbpixels, nbpixels)
             Q += noise_array_Q
-            noise_array_U = np.random.normal(0.0,0.01*U.max(),size=nbpixels*nbpixels)
-            noise_array_U = noise_array_U.reshape(nbpixels,nbpixels)
+            noise_array_U = np.random.normal(
+                0.0, 0.01*U.max(), size=nbpixels*nbpixels)
+            noise_array_U = noise_array_U.reshape(nbpixels, nbpixels)
             U += noise_array_U
         # add mask in polarized intensity Qphi image if mask_radius != 0
         if mask_radius != 0.0:
-            pillbox = np.ones((nx,ny))
+            pillbox = np.ones((nx, ny))
             imaskrad = mask_radius/cdelt  # since cdelt is pixel size in arcseconds
-            pillbox[np.where(rrs<imaskrad)] = 0.
+            pillbox[np.where(rrs < imaskrad)] = 0.
 
     # ------------
     # smooth image
     # ------------
     # beam area in pixel^2
-    beam =  (np.pi/(4.*np.log(2.)))*bmaj*bmin/(cdelt**2.)
+    beam = (np.pi/(4.*np.log(2.)))*bmaj*bmin/(cdelt**2.)
     # stdev lengths in pixel
     stdev_x = (bmaj/(2.*np.sqrt(2.*np.log(2.)))) / cdelt
     stdev_y = (bmin/(2.*np.sqrt(2.*np.log(2.)))) / cdelt
@@ -2821,15 +3007,16 @@ if recalc_fluxmap == 'Yes':
     if (polarized_scat == 'No' and plot_tau == 'No'):
         # Call to Gauss_filter function
         if moment_order != 1:
-            smooth = Gauss_filter(raw_intensity, stdev_x, stdev_y, bpaangle, Plot=False)
+            smooth = Gauss_filter(raw_intensity, stdev_x,
+                                  stdev_y, bpaangle, Plot=False)
         else:
             smooth = raw_intensity
 
         # convert image from Jy/pixel to mJy/beam or microJy/beam
         # could be refined...
-        if brightness_temp=='Yes':
+        if brightness_temp == 'Yes':
             convolved_intensity = smooth
-        if brightness_temp=='No':
+        if brightness_temp == 'No':
             convolved_intensity = smooth * 1e3 * beam   # mJy/beam
 
         strflux = 'Flux of continuum emission (mJy/beam)'
@@ -2848,12 +3035,11 @@ if recalc_fluxmap == 'Yes':
         else:
             strgas = gasspecies
         if gasspecies != 'so':
-            strgas+=r' ($%d \rightarrow %d$)' % (iline,iline-1)
+            strgas += r' ($%d \rightarrow %d$)' % (iline, iline-1)
         if gasspecies == 'so' and iline == 14:
-            strgas+=r' ($5_6 \rightarrow 4_5$)'
+            strgas += r' ($5_6 \rightarrow 4_5$)'
 
-
-        if brightness_temp=='Yes':
+        if brightness_temp == 'Yes':
             # Gas RT and a single velocity channel
             if RTdust_or_gas == 'gas' and widthkms == 0.0:
                 strflux = strgas+' brightness temperature (K)'
@@ -2876,7 +3062,8 @@ if recalc_fluxmap == 'Yes':
                 if RTdust_or_gas == 'gas' and widthkms == 0.0:
                     strflux = strgas+' intensity ($\mu$Jy/beam)'
                 if RTdust_or_gas == 'gas' and moment_order == 0 and widthkms != 0.0:
-                    strflux = strgas+' integrated intensity ($\mu$Jy/beam km/s)'
+                    strflux = strgas + \
+                        ' integrated intensity ($\mu$Jy/beam km/s)'
         #
         if RTdust_or_gas == 'gas' and moment_order == 1:
             convolved_intensity = smooth
@@ -2892,10 +3079,11 @@ if recalc_fluxmap == 'Yes':
 
     # b) case with polarized scattering
     if RTdust_or_gas == 'dust' and polarized_scat == 'Yes':
-        Q_smooth = Gauss_filter(Q,stdev_x,stdev_y,bpaangle,Plot=False)
-        U_smooth = Gauss_filter(U,stdev_x,stdev_y,bpaangle,Plot=False)
+        Q_smooth = Gauss_filter(Q, stdev_x, stdev_y, bpaangle, Plot=False)
+        U_smooth = Gauss_filter(U, stdev_x, stdev_y, bpaangle, Plot=False)
         if mask_radius != 0.0:
-            pillbox_smooth = Gauss_filter(pillbox, stdev_x, stdev_y, bpaangle, Plot=False)
+            pillbox_smooth = Gauss_filter(
+                pillbox, stdev_x, stdev_y, bpaangle, Plot=False)
             Q_smooth *= pillbox_smooth
             U_smooth *= pillbox_smooth
         Q_phi = Q_smooth * np.cos(2*theta) + U_smooth * np.sin(2*theta)
@@ -2910,7 +3098,7 @@ if recalc_fluxmap == 'Yes':
     hdu.header['NAXIS'] = 2  # 2
     hdu.header['NAXIS1'] = nbpixels
     hdu.header['NAXIS2'] = nbpixels
-    hdu.header['EPOCH']  = 2000.0
+    hdu.header['EPOCH'] = 2000.0
     hdu.header['EQUINOX'] = 2000.0
     hdu.header['LONPOLE'] = 180.0
     hdu.header['CTYPE1'] = 'RA---SIN'
@@ -2935,15 +3123,15 @@ if recalc_fluxmap == 'Yes':
     hdu.header['BZERO'] = 0
     del hdu.header['EXTEND']
     # keep track of all parameters in params.dat file
-    #for i in range(len(lines_params)):
+    # for i in range(len(lines_params)):
     #    hdu.header[var[i]] = par[i]
     hdu.data = convolved_intensity
     inbasename = os.path.basename('./'+outfile)
     if add_noise == 'Yes':
-        substr='_wn'+str(noise_dev_std)+'_JyBeam.fits'
-        jybeamfileout=re.sub('.fits', substr, inbasename)
+        substr = '_wn'+str(noise_dev_std)+'_JyBeam.fits'
+        jybeamfileout = re.sub('.fits', substr, inbasename)
     else:
-        jybeamfileout=re.sub('.fits', '_JyBeam.fits', inbasename)
+        jybeamfileout = re.sub('.fits', '_JyBeam.fits', inbasename)
     if polarized_scat == 'Yes':
         jybeamfileout = 'Qphi.fits'
     hdu.writeto(jybeamfileout, overwrite=True)
@@ -2957,17 +3145,17 @@ if recalc_fluxmap == 'Yes':
         hdr0 = hdu0[0].header
         nx = int(hdr0['NAXIS1'])
         ny = nx
-        if ( (nx % 2) == 0):
+        if ((nx % 2) == 0):
             nx = nx+1
             ny = ny+1
         hdr1 = deepcopy(hdr0)
-        hdr1['NAXIS1']=nx
-        hdr1['NAXIS2']=ny
-        hdr1['CRPIX1']=(nx+1)/2
-        hdr1['CRPIX2']=(ny+1)/2
+        hdr1['NAXIS1'] = nx
+        hdr1['NAXIS2'] = ny
+        hdr1['CRPIX1'] = (nx+1)/2
+        hdr1['CRPIX2'] = (ny+1)/2
 
         # slightly modify original image such that centre is at middle of image -> odd number of cells
-        image_centered = gridding(jybeamfileout,hdr1,fullWCS=False)
+        image_centered = gridding(jybeamfileout, hdr1, fullWCS=False)
         fileout_centered = re.sub('.fits', 'centered.fits', jybeamfileout)
         fits.writeto(fileout_centered, image_centered, hdr1, overwrite=True)
 
@@ -2977,30 +3165,29 @@ if recalc_fluxmap == 'Yes':
         fits.writeto(fileout_rotated, image_rotated, hdr1, overwrite=True)
         hdr2 = deepcopy(hdr1)
         cosi = np.cos(inclination_input*np.pi/180.)
-        hdr2['CDELT1']=hdr2['CDELT1']*cosi
+        hdr2['CDELT1'] = hdr2['CDELT1']*cosi
 
         # Then deproject with inclination via gridding interpolation function and hdr2
-        image_stretched = gridding(fileout_rotated,hdr2)
+        image_stretched = gridding(fileout_rotated, hdr2)
 
         # rescale stretched image by r^2
         nx = hdr2['NAXIS1']
         ny = hdr2['NAXIS2']
         cdelt = abs(hdr2['CDELT1']*3600)  # in arcseconds
-        (x0,y0) = (nx/2, ny/2)
+        (x0, y0) = (nx/2, ny/2)
         mymax = 0.0
         for j in range(nx):
             for k in range(ny):
                 dx = (j-x0)*cdelt
                 dy = (k-y0)*cdelt
                 rad = np.sqrt(dx*dx + dy*dy)
-                image_stretched[j,k] *= (rad*rad)
-                if (image_stretched[j,k] > mymax):
-                # cuidadin!
-                #if (rad <= truncation_radius and image_stretched[j,k] > mymax):
-                    mymax = image_stretched[j,k]
-                #else:
+                image_stretched[j, k] *= (rad*rad)
+                if (image_stretched[j, k] > mymax):
+                    # cuidadin!
+                    # if (rad <= truncation_radius and image_stretched[j,k] > mymax):
+                    mymax = image_stretched[j, k]
+                # else:
                 #    image_stretched[j,k] = 0.0
-
 
         # Normalize PI intensity
         image_stretched /= mymax
@@ -3008,33 +3195,33 @@ if recalc_fluxmap == 'Yes':
         fits.writeto(fileout_stretched, image_stretched, hdr2, overwrite=True)
 
         # Then deproject via gridding interpolatin function and hdr1
-        image_destretched = gridding(fileout_stretched,hdr1)
+        image_destretched = gridding(fileout_stretched, hdr1)
 
         # and finally de-rotate by -position angle
-        final_image = ndimage.rotate(image_destretched, -posangle, reshape=False)
+        final_image = ndimage.rotate(
+            image_destretched, -posangle, reshape=False)
 
         # save final fits
         inbasename = os.path.basename('./'+outfile)
         if add_noise == 'Yes':
-            substr='_wn'+str(noise_dev_std)+'_JyBeam.fits'
-            jybeamfileout=re.sub('.fits', substr, inbasename)
+            substr = '_wn'+str(noise_dev_std)+'_JyBeam.fits'
+            jybeamfileout = re.sub('.fits', substr, inbasename)
         else:
-            jybeamfileout=re.sub('.fits', '_JyBeam.fits', inbasename)
-        fits.writeto(jybeamfileout,final_image,hdr1,clobber=True)
+            jybeamfileout = re.sub('.fits', '_JyBeam.fits', inbasename)
+        fits.writeto(jybeamfileout, final_image, hdr1, clobber=True)
         convolved_intensity = final_image
         os.system('rm -f Qphi*.fits')
-
 
     # --------------------
     # plotting image panel
     # --------------------
     matplotlib.rcParams.update({'font.size': 20})
     matplotlib.rc('font', family='Arial')
-    fontcolor='white'
+    fontcolor = 'white'
 
     # name of pdf file for final image
     fileout = re.sub('.fits', '.pdf', jybeamfileout)
-    fig = plt.figure(figsize=(8.,8.))
+    fig = plt.figure(figsize=(8., 8.))
     plt.subplots_adjust(left=0.17, right=0.92, top=0.88, bottom=0.1)
     ax = plt.gca()
 
@@ -3042,7 +3229,7 @@ if recalc_fluxmap == 'Yes':
     # Convention is that RA offset increases leftwards (ie,
     # east is to the left), while Dec offset increases from
     # bottom to top (ie, north is the top)
-    if ( (nx % 2) == 0):
+    if ((nx % 2) == 0):
         dpix = 0.5
     else:
         dpix = 0.0
@@ -3055,21 +3242,21 @@ if recalc_fluxmap == 'Yes':
     if (minmaxaxis < abs(a0)):
         da = minmaxaxis
     else:
-        da = maximum(abs(a0),abs(a1))
+        da = maximum(abs(a0), abs(a1))
     mina = da
     maxa = -da
     xlambda = mina - 0.166*da
-    ax.set_ylim(-da,da)
-    ax.set_xlim(da,-da)      # x (=R.A.) increases leftward
+    ax.set_ylim(-da, da)
+    ax.set_xlim(da, -da)      # x (=R.A.) increases leftward
     dmin = -da
     dmax = da
 
     # x- and y-ticks and labels
-    ax.tick_params(top='on', right='on', length = 5, width=1.0, direction='out')
+    ax.tick_params(top='on', right='on', length=5, width=1.0, direction='out')
     ax.xaxis.set_major_locator(plt.MaxNLocator(5))
     ax.yaxis.set_major_locator(plt.MaxNLocator(5))
-    #ax.set_xticks(ax.get_yticks())    # set same ticks in x and y in cartesian
-    #ax.set_yticks(ax.get_xticks())    # set same ticks in x and y in cartesian
+    # ax.set_xticks(ax.get_yticks())    # set same ticks in x and y in cartesian
+    # ax.set_yticks(ax.get_xticks())    # set same ticks in x and y in cartesian
     ax.set_xlabel('RA offset [arcsec]')
     ax.set_ylabel('Dec offset [arcsec]')
 
@@ -3083,7 +3270,8 @@ if recalc_fluxmap == 'Yes':
     if RTdust_or_gas == 'gas' and moment_order == 1:
         min = -6.0
         max = 6.0
-    CM = ax.imshow(convolved_intensity, origin='lower', cmap=mycolormap, interpolation='bilinear', extent=[a0,a1,d0,d1], vmin=min, vmax=max, aspect='auto')
+    CM = ax.imshow(convolved_intensity, origin='lower', cmap=mycolormap,
+                   interpolation='bilinear', extent=[a0, a1, d0, d1], vmin=min, vmax=max, aspect='auto')
     '''
     X = a0 + (a1-a0)*arange(nx)/(nx-1.0)
     Y = d0 + (d1-d0)*arange(ny)/(ny-1.0)
@@ -3091,13 +3279,14 @@ if recalc_fluxmap == 'Yes':
     '''
 
     # Add wavelength in top-left corner
-    strlambda = '$\lambda$='+str(round(lbda0, 2))+'mm' # round to 2 decimals
+    strlambda = '$\lambda$='+str(round(lbda0, 2))+'mm'  # round to 2 decimals
     if lbda0 < 0.01:
-        strlambda = '$\lambda$='+str(round(lbda0*1e3,2))+'$\mu$m'
-    ax.text(xlambda,dmax-0.166*da,strlambda, fontsize=20, color = 'white',weight='bold',horizontalalignment='left')
+        strlambda = '$\lambda$='+str(round(lbda0*1e3, 2))+'$\mu$m'
+    ax.text(xlambda, dmax-0.166*da, strlambda, fontsize=20,
+            color='white', weight='bold', horizontalalignment='left')
 
     # Add + sign at the origin
-    ax.plot(0.0,0.0,'+',color='white',markersize=10)
+    ax.plot(0.0, 0.0, '+', color='white', markersize=10)
     '''
     if check_beam == 'Yes':
         ax.contour(convolved_intensity,levels=[0.5*convolved_intensity.max()],color='black', linestyles='-',origin='lower',extent=[a0,a1,d0,d1])
@@ -3105,12 +3294,14 @@ if recalc_fluxmap == 'Yes':
 
     # Add a few contours in order 1 moment maps for gas emission
     if RTdust_or_gas == 'gas' and moment_order == 1:
-        ax.contour(convolved_intensity,levels=10,color='black', linestyles='-',origin='lower',extent=[a0,a1,d0,d1])
+        ax.contour(convolved_intensity, levels=10, color='black',
+                   linestyles='-', origin='lower', extent=[a0, a1, d0, d1])
 
     # plot beam
     if plot_tau == 'No':
         from matplotlib.patches import Ellipse
-        e = Ellipse(xy=[xlambda,dmin+0.166*da], width=bmin, height=bmaj, angle=bpaangle+90.0)
+        e = Ellipse(xy=[xlambda, dmin+0.166*da], width=bmin,
+                    height=bmaj, angle=bpaangle+90.0)
         e.set_clip_box(ax.bbox)
         e.set_facecolor('white')
         e.set_alpha(1.0)
@@ -3130,7 +3321,7 @@ if recalc_fluxmap == 'Yes':
     from mpl_toolkits.axes_grid1 import make_axes_locatable
     divider = make_axes_locatable(ax)
     cax = divider.append_axes("top", size="2.5%", pad=0.12)
-    cb =  plt.colorbar(CM, cax=cax, orientation='horizontal')
+    cb = plt.colorbar(CM, cax=cax, orientation='horizontal')
     cax.xaxis.tick_top()
     cax.xaxis.set_tick_params(labelsize=20, direction='out')
     cax.xaxis.set_major_locator(plt.MaxNLocator(6))
@@ -3147,24 +3338,24 @@ if recalc_fluxmap == 'Yes':
     # =====================
     if deproj_polar == 'Yes':
         currentdir = os.getcwd()
-        alpha_min = 0.;          # deg, PA of offset from the star
-        Delta_min = 0.;          # arcsec, amplitude of offset from the star
+        alpha_min = 0.          # deg, PA of offset from the star
+        Delta_min = 0.          # arcsec, amplitude of offset from the star
         RA = 0.0  # if input image is a prediction, star should be at the center
-        DEC = 0.0 # note that this deprojection routine works in WCS coordinates
+        DEC = 0.0  # note that this deprojection routine works in WCS coordinates
         cosi = np.cos(inclination_input*np.pi/180.)
 
-        print('deprojection around PA [deg] = ',posangle)
-        print('and inclination [deg] = ',inclination_input)
+        print('deprojection around PA [deg] = ', posangle)
+        print('and inclination [deg] = ', inclination_input)
 
         # makes a new directory "deproj_polar_dir" and calculates a number
         # of products: copy of the input image [_fullim], centered at
         # (RA,DEC) [_centered], deprojection by cos(i) [_stretched], polar
         # image [_polar], etc. Also, a _radial_profile which is the
         # average radial intensity.
-        exec_polar_expansions(jybeamfileout,'deproj_polar_dir',posangle,cosi,RA=RA,DEC=DEC,
+        exec_polar_expansions(jybeamfileout, 'deproj_polar_dir', posangle, cosi, RA=RA, DEC=DEC,
                               alpha_min=alpha_min, Delta_min=Delta_min,
-                              XCheckInv=False,DoRadialProfile=False,
-                              DoAzimuthalProfile=False,PlotRadialProfile=False,
+                              XCheckInv=False, DoRadialProfile=False,
+                              DoAzimuthalProfile=False, PlotRadialProfile=False,
                               zoomfactor=1.)
 
         # Save polar fits in current directory
@@ -3183,37 +3374,37 @@ if recalc_fluxmap == 'Yes':
             jshift = int(nbpixels/2)
         else:
             jshift = int(nbpixels/2)
-        convolved_intensity = np.roll(convolved_intensity, shift=-jshift, axis=1)
-
+        convolved_intensity = np.roll(
+            convolved_intensity, shift=-jshift, axis=1)
 
         # -------------------------------
         # plot image in polar coordinates
         # -------------------------------
         fileout = re.sub('.fits', '.pdf', filein)
-        fig = plt.figure(figsize=(8.,8.))
+        fig = plt.figure(figsize=(8., 8.))
         plt.subplots_adjust(left=0.15, right=0.96, top=0.88, bottom=0.09)
         ax = plt.gca()
 
         # Set x- and y-ranges
-        ax.set_xlim(-180,180)          # PA relative to Clump 1's
-        if (minmaxaxis < maximum(abs(a0),abs(a1))):
+        ax.set_xlim(-180, 180)          # PA relative to Clump 1's
+        if (minmaxaxis < maximum(abs(a0), abs(a1))):
             ymax = minmaxaxis
         else:
-            ymax = maximum(abs(a0),abs(a1))
-        ax.set_ylim(0,ymax)      # Deprojected radius in arcsec
+            ymax = maximum(abs(a0), abs(a1))
+        ax.set_ylim(0, ymax)      # Deprojected radius in arcsec
 
-        if ( (nx % 2) == 0):
+        if ((nx % 2) == 0):
             dpix = 0.5
         else:
             dpix = 0.0
         a0 = cdelt*(nx//2.-dpix)   # >0
 
-        ax.tick_params(top='on', right='on', length = 5, width=1.0, direction='out')
-        ax.set_xticks((-180,-120,-60,0,60,120,180))
-        #ax.set_yticks((0.0,0.1,0.2,0.3,0.4,0.5,0.6,0.7))
+        ax.tick_params(top='on', right='on', length=5,
+                       width=1.0, direction='out')
+        ax.set_xticks((-180, -120, -60, 0, 60, 120, 180))
+        # ax.set_yticks((0.0,0.1,0.2,0.3,0.4,0.5,0.6,0.7))
         ax.set_xlabel('Position Angle [deg]')
         ax.set_ylabel('Radius [arcsec]')
-
 
         # imshow does a bilinear interpolation. You can switch it off by putting
         # interpolation='none'
@@ -3225,19 +3416,22 @@ if recalc_fluxmap == 'Yes':
         if RTdust_or_gas == 'gas' and moment_order == 1:
             min = -6.0
             max = 6.0
-        CM = ax.imshow(convolved_intensity, origin='lower', cmap=mycolormap, interpolation='bilinear', extent=[-180,180,0,maximum(abs(a0),abs(a1))], vmin=min, vmax=max, aspect='auto')   # (left, right, bottom, top)
+        CM = ax.imshow(convolved_intensity, origin='lower', cmap=mycolormap, interpolation='bilinear', extent=[
+                       -180, 180, 0, maximum(abs(a0), abs(a1))], vmin=min, vmax=max, aspect='auto')   # (left, right, bottom, top)
 
         # Add wavelength in bottom-left corner
-        strlambda = '$\lambda$='+str(round(lbda0, 2))+'mm' # round to 2 decimals
+        strlambda = '$\lambda$=' + \
+            str(round(lbda0, 2))+'mm'  # round to 2 decimals
         if lbda0 < 0.01:
-            strlambda = '$\lambda$='+str(round(lbda0*1e3,2))+'$\mu$m'
-        ax.text(-160,0.95*ymax,strlambda,fontsize=20,color='white',weight='bold',horizontalalignment='left',verticalalignment='top')
+            strlambda = '$\lambda$='+str(round(lbda0*1e3, 2))+'$\mu$m'
+        ax.text(-160, 0.95*ymax, strlambda, fontsize=20, color='white',
+                weight='bold', horizontalalignment='left', verticalalignment='top')
 
         # plot color-bar
         from mpl_toolkits.axes_grid1 import make_axes_locatable
         divider = make_axes_locatable(ax)
         cax = divider.append_axes("top", size="2.5%", pad=0.12)
-        cb =  plt.colorbar(CM, cax=cax, orientation='horizontal')
+        cb = plt.colorbar(CM, cax=cax, orientation='horizontal')
         cax.xaxis.tick_top()
         cax.xaxis.set_tick_params(labelsize=20, direction='out')
         cax.xaxis.set_major_locator(plt.MaxNLocator(6))
@@ -3250,33 +3444,37 @@ if recalc_fluxmap == 'Yes':
         plt.clf()
 
         if axi_intensity == 'Yes':
-            average_convolved_intensity=np.zeros(nbpixels)
+            average_convolved_intensity = np.zeros(nbpixels)
             for j in range(nbpixels):
                 for i in range(nbpixels):
-                    average_convolved_intensity[j]+=convolved_intensity[j][i]/nbpixels
+                    average_convolved_intensity[j] += convolved_intensity[j][i]/nbpixels
 
             # rkarr = np.linspace(0,minmaxaxis*distance,nbpixels)
             # rkarr = np.linspace(2,40,nbpixels)
             # rkarr = gas.rmed*gas.culength/1.5e11  # radius in a.u.
-            rkarr = np.linspace(0,gas.rmed[-1]*gas.culength/1.5e11/distance,nbpixels) # radius in arcseconds
+            # radius in arcseconds
+            rkarr = np.linspace(
+                0, gas.rmed[-1]*gas.culength/1.5e11/distance, nbpixels)
 
             nb_noise = 0
             if add_noise == 'Yes':
                 nb_noise = 1
 
-            file = open('axiconv%d.dat' % (nb_noise),'w')
+            file = open('axiconv%d.dat' % (nb_noise), 'w')
             for kk in range(nbpixels):
-                file.write('%s\t%s\t%s\n' % (str(rkarr[kk]),str(np.mean(convolved_intensity[kk])),str(np.std(convolved_intensity[kk]))))
+                file.write('%s\t%s\t%s\n' % (str(rkarr[kk]), str(
+                    np.mean(convolved_intensity[kk])), str(np.std(convolved_intensity[kk]))))
             file.close()
 
-            fig = plt.figure(figsize=(8.,3.))
+            fig = plt.figure(figsize=(8., 3.))
             ax = plt.gca()
             plt.subplots_adjust(left=0.12, right=0.96, top=0.95, bottom=0.25)
 
-            ax.plot(rkarr*distance,average_convolved_intensity, color='k')
+            ax.plot(rkarr*distance, average_convolved_intensity, color='k')
             ax.xaxis.set_ticks_position('both')
             ax.yaxis.set_ticks_position('both')
-            ax.set_xlim(0,minmaxaxis*distance)      # Deprojected radius in arcsec
+            # Deprojected radius in arcsec
+            ax.set_xlim(0, minmaxaxis*distance)
             ax.tick_params('both', labelsize=18)
             ax.set_xlabel('Orbital radius [au]', fontsize=18)
             # ax.set_ylabel(r'Axisymmetric convolved intensity [$\mu$Jy/beam]', family='monospace', fontsize=18)
@@ -3303,34 +3501,39 @@ if calc_abs_map == 'Yes':
     # -  -  -  -  -  -  -  -  -  -  -  -  -  -
     if dustdens_eq_gasdens == 'No' and fargo3d == 'No':
         # read information on the dust particles
-        (rad, azi, vr, vt, Stokes, a) = np.loadtxt(dir+'/dustsystat'+str(on)+'.dat', unpack=True)
+        (rad, azi, vr, vt, Stokes, a) = np.loadtxt(
+            dir+'/dustsystat'+str(on)+'.dat', unpack=True)
 
         # We need to recompute dustcube again as we sweeped it off the memory before. Since it
         # is now quick to compute it, we simply do it again!
         # Populate dust bins
         dust = np.zeros((nsec*nrad*nbin))
-        for m in range (len(a)):   # sum over dust particles
+        for m in range(len(a)):   # sum over dust particles
             r = rad[m]
             t = azi[m]
             # radial index of the cell where the particle is
             if radialspacing == 'L':
-                i = int(np.log(r/gas.redge.min())/np.log(gas.redge.max()/gas.redge.min()) * nrad)
+                i = int(np.log(r/gas.redge.min()) /
+                        np.log(gas.redge.max()/gas.redge.min()) * nrad)
             else:
                 i = np.argmin(np.abs(gas.redge-r))
             if (i < 0 or i >= nrad):
-                sys.exit('pb with i = ', i, ' in calc_abs_map step: I must exit!')
+                sys.exit('pb with i = ', i,
+                         ' in calc_abs_map step: I must exit!')
             # azimuthal index of the cell where the particle is
             # (general expression since grid spacing in azimuth is always arithmetic)
             j = int((t-gas.pedge.min())/(gas.pedge.max()-gas.pedge.min()) * nsec)
             if (j < 0 or j >= nsec):
-                sys.exit('pb with j = ', j, ' in calc_abs_map step: I must exit!')
+                sys.exit('pb with j = ', j,
+                         ' in calc_abs_map step: I must exit!')
             # particle size
             pcsize = a[m]
             # find out which bin particle belongs to. Here we do nearest-grid point.
-            ibin = int(np.log(pcsize/bins.min())/np.log(bins.max()/bins.min()) * nbin)
+            ibin = int(np.log(pcsize/bins.min()) /
+                       np.log(bins.max()/bins.min()) * nbin)
             if (ibin >= 0 and ibin < nbin):
                 k = ibin*nsec*nrad + j*nrad + i
-                dust[k] +=1
+                dust[k] += 1
                 nparticles[ibin] += 1
                 avgstokes[ibin] += Stokes[m]
 
@@ -3338,38 +3541,47 @@ if calc_abs_map == 'Yes':
             if nparticles[ibin] == 0:
                 nparticles[ibin] = 1
             avgstokes[ibin] /= nparticles[ibin]
-            print(str(nparticles[ibin])+' grains between '+str(bins[ibin])+' and '+str(bins[ibin+1])+' meters')
+            print(str(nparticles[ibin])+' grains between ' +
+                  str(bins[ibin])+' and '+str(bins[ibin+1])+' meters')
 
         # dustcube currently contains N_i (r,phi), the number of particles per bin size in every grid cell
         dustcube = dust.reshape(nbin, nsec, nrad)
-        dustcube = np.swapaxes(dustcube,1,2)  # means nbin, nrad, nsec
+        dustcube = np.swapaxes(dustcube, 1, 2)  # means nbin, nrad, nsec
 
         # Mass of gas in units of the star's mass
         Mgas = np.sum(gas.data*surface)
-        print('Mgas / Mstar= '+str(Mgas)+' and Mgas [kg] = '+str(Mgas*gas.cumass))
+        print('Mgas / Mstar= '+str(Mgas) +
+              ' and Mgas [kg] = '+str(Mgas*gas.cumass))
 
         frac = np.zeros(nbin)
         # finally compute dust surface density for each size bin
         for ibin in range(nbin):
             # fraction of dust mass in current size bin 'ibin', easy to check numerically that sum_frac = 1
-            frac[ibin] = (bins[ibin+1]**(4.0-pindex) - bins[ibin]**(4.0-pindex)) / (amax**(4.0-pindex) - amin**(4.0-pindex))
+            frac[ibin] = (bins[ibin+1]**(4.0-pindex) - bins[ibin] **
+                          (4.0-pindex)) / (amax**(4.0-pindex) - amin**(4.0-pindex))
             # total mass of dust particles in current size bin 'ibin'
             M_i_dust = ratio * Mgas * frac[ibin]
             # dustcube, which contained N_i(r,phi), now contains sigma_i_dust (r,phi)
-            dustcube[ibin,:,:] *= M_i_dust / surface / nparticles[ibin]
+            dustcube[ibin, :, :] *= M_i_dust / surface / nparticles[ibin]
             # conversion in g/cm^2
-            dustcube[ibin,:,:] *= (gas.cumass*1e3)/((gas.culength*1e2)**2.)  # dimensions: nbin, nrad, nsec
+            # dimensions: nbin, nrad, nsec
+            dustcube[ibin, :, :] *= (gas.cumass*1e3)/((gas.culength*1e2)**2.)
 
         # Overwrite first bin (ibin = 0) to model extra bin with small dust tightly coupled to the gas
         if bin_small_dust == 'Yes':
             frac[0] *= 5e3
             print("!!!!!!!!!!!!!!!!!!!!!!!!!!!")
-            print("Bin with index 0 changed to include arbitrarilly small dust tightly coupled to the gas")
-            print("Mass fraction of bin 0 changed to: ",str(frac[0]))
+            print(
+                "Bin with index 0 changed to include arbitrarilly small dust tightly coupled to the gas")
+            print("Mass fraction of bin 0 changed to: ", str(frac[0]))
             print("!!!!!!!!!!!!!!!!!!!!!!!!!!!")
-            imin = np.argmin(np.abs(gas.rmed-1.2))  # radial index corresponding to 0.25"
-            imax = np.argmin(np.abs(gas.rmed-3.0))  # radial index corresponding to 0.6"
-            dustcube[0,imin:imax,:] = gas.data[imin:imax,:] * ratio * frac[0] * (gas.cumass*1e3)/((gas.culength*1e2)**2.)  # dimensions: nbin, nrad, nsec
+            # radial index corresponding to 0.25"
+            imin = np.argmin(np.abs(gas.rmed-1.2))
+            # radial index corresponding to 0.6"
+            imax = np.argmin(np.abs(gas.rmed-3.0))
+            dustcube[0, imin:imax, :] = gas.data[imin:imax, :] * ratio * frac[0] * \
+                (gas.cumass*1e3)/((gas.culength*1e2)
+                                  ** 2.)  # dimensions: nbin, nrad, nsec
 
     # -  -  -  -  -  -  -  -  -  -  -  -  -  -
     # CASE 2: FARGO3D simulation (dust fluids)
@@ -3377,7 +3589,7 @@ if calc_abs_map == 'Yes':
     if dustdens_eq_gasdens == 'No' and fargo3d == 'Yes':
         dust = np.zeros((nsec*nrad*nbin))
         dustcube = dust.reshape(nbin, nsec, nrad)
-        dustcube = np.swapaxes(dustcube,1,2)  # means nbin, nrad, nsec
+        dustcube = np.swapaxes(dustcube, 1, 2)  # means nbin, nrad, nsec
 
         for ibin in range(len(dust_id)):
 
@@ -3385,27 +3597,31 @@ if calc_abs_map == 'Yes':
             #print('ibin = ', ibin, ', read file = ',fileread)
 
             # directly read dust surface density for each dust fluid in code units
-            dustcube[ibin,:,:]  = Field(field=fileread, directory=dir).data
+            dustcube[ibin, :, :] = Field(field=fileread, directory=dir).data
 
             # conversion in g/cm^2
-            dustcube[ibin,:,:] *= (gas.cumass*1e3)/((gas.culength*1e2)**2.)  # dimensions: nbin, nrad, nsec
+            # dimensions: nbin, nrad, nsec
+            dustcube[ibin, :, :] *= (gas.cumass*1e3)/((gas.culength*1e2)**2.)
 
             # decrease dust surface density inside mask radius
             # NB: mask_radius is in arcseconds
             rmask_in_code_units = mask_radius*distance*au/gas.culength/1e2
             for i in range(nrad):
                 if (gas.rmed[i] < rmask_in_code_units):
-                    dustcube[ibin,i,:] = 0.0 # *= ( (gas.rmed[i]/rmask_in_code_units)**(10.0) ) CUIDADIN!
+                    # *= ( (gas.rmed[i]/rmask_in_code_units)**(10.0) ) CUIDADIN!
+                    dustcube[ibin, i, :] = 0.0
 
-
-        print('Total dust mass [g] = ', np.sum(dustcube[:,:,:]*surface*(gas.culength*1e2)**2.))
-        print('Total dust mass [Mgas] = ', np.sum(dustcube[:,:,:]*surface*(gas.culength*1e2)**2.)/(Mgas*gas.cumass*1e3))
-        print('Total dust mass [Mstar] = ', np.sum(dustcube[:,:,:]*surface*(gas.culength*1e2)**2.)/(gas.cumass*1e3))
+        print('Total dust mass [g] = ', np.sum(
+            dustcube[:, :, :]*surface*(gas.culength*1e2)**2.))
+        print('Total dust mass [Mgas] = ', np.sum(
+            dustcube[:, :, :]*surface*(gas.culength*1e2)**2.)/(Mgas*gas.cumass*1e3))
+        print('Total dust mass [Mstar] = ', np.sum(
+            dustcube[:, :, :]*surface*(gas.culength*1e2)**2.)/(gas.cumass*1e3))
 
         # Total dust surface density
-        dust_surface_density = np.sum(dustcube,axis=0)
-        print('Maximum dust surface density [in g/cm^2] is ', dust_surface_density.max())
-
+        dust_surface_density = np.sum(dustcube, axis=0)
+        print(
+            'Maximum dust surface density [in g/cm^2] is ', dust_surface_density.max())
 
     # ---------------------------
     # b) assume dust surface density = gas surface density
@@ -3414,11 +3630,14 @@ if calc_abs_map == 'Yes':
         dust = np.zeros((nsec*nrad*nbin))
         # dustcube currently contains N_i (r,phi), the number of particles per bin size in every grid cell
         dustcube = dust.reshape(nbin, nsec, nrad)
-        dustcube = np.swapaxes(dustcube,1,2)  # means nbin, nrad, nsec
+        dustcube = np.swapaxes(dustcube, 1, 2)  # means nbin, nrad, nsec
         frac = np.zeros(nbin)
         for ibin in range(nbin):
-            frac[ibin] = (bins[ibin+1]**(4.0-pindex) - bins[ibin]**(4.0-pindex)) / (amax**(4.0-pindex) - amin**(4.0-pindex))
-            dustcube[ibin,:,:] = gas.data * ratio * frac[ibin] * (gas.cumass*1e3)/((gas.culength*1e2)**2.)  # dimensions: nbin, nrad, nsec
+            frac[ibin] = (bins[ibin+1]**(4.0-pindex) - bins[ibin] **
+                          (4.0-pindex)) / (amax**(4.0-pindex) - amin**(4.0-pindex))
+            dustcube[ibin, :, :] = gas.data * ratio * frac[ibin] * \
+                (gas.cumass*1e3)/((gas.culength*1e2)
+                                  ** 2.)  # dimensions: nbin, nrad, nsec
 
     # ---------------------------
     # We then need to recompute absorption mass opacities from dustkappa* files
@@ -3431,7 +3650,8 @@ if calc_abs_map == 'Yes':
         sizemin_file = 1e-6          # in meters, do not edit!
         sizemax_file = 1e-1          # in meters, do not edit!
         nbfiles = 50                 # do not edit
-        size_file = sizemin_file * (sizemax_file/sizemin_file)**(np.arange(nbfiles)/(nbfiles-1.0))
+        size_file = sizemin_file * \
+            (sizemax_file/sizemin_file)**(np.arange(nbfiles)/(nbfiles-1.0))
 
     # Loop over size bins
     for k in range(nbin):
@@ -3446,18 +3666,25 @@ if calc_abs_map == 'Yes':
             l2 = lbda[i1+1]
             k1 = kappa_abs[i1-1]
             k2 = kappa_abs[i1+1]
-            abs_opacity[k] = (k1*np.log(l2/lbda1) + k2*np.log(lbda1/l1))/np.log(l2/l1)
-            print('absorption opacity [cm^2/g] of bin ',k,' with average size ', bins[k], ' = ',abs_opacity[k])
+            abs_opacity[k] = (k1*np.log(l2/lbda1) + k2 *
+                              np.log(lbda1/l1))/np.log(l2/l1)
+            print('absorption opacity [cm^2/g] of bin ', k,
+                  ' with average size ', bins[k], ' = ', abs_opacity[k])
         else:
             # Case where we use pre-calculated dustkappa* files in opacity_dir directory
-            index_inf = int(np.log(bins[k]/sizemin_file)/np.log(sizemax_file/sizemin_file) * nbfiles)
+            index_inf = int(
+                np.log(bins[k]/sizemin_file)/np.log(sizemax_file/sizemin_file) * nbfiles)
             if (index_inf < nbfiles-1):
                 index_sup = index_inf+1
-                file_index_inf = opacdir+'/dustkappa_'+species+str(index_inf)+'.inp'
-                file_index_sup = opacdir+'/dustkappa_'+species+str(index_sup)+'.inp'
-                (lbda_inf, kappa_abs_inf, kappa_sca_inf, g_inf) = read_opacities(file_index_inf)
+                file_index_inf = opacdir+'/dustkappa_' + \
+                    species+str(index_inf)+'.inp'
+                file_index_sup = opacdir+'/dustkappa_' + \
+                    species+str(index_sup)+'.inp'
+                (lbda_inf, kappa_abs_inf, kappa_sca_inf,
+                 g_inf) = read_opacities(file_index_inf)
                 #np.loadtxt(file_index_inf, unpack=True, skiprows=2)
-                (lbda_sup, kappa_abs_sup, kappa_sca_sup, g_sup) = read_opacities(file_index_sup)
+                (lbda_sup, kappa_abs_sup, kappa_sca_sup,
+                 g_sup) = read_opacities(file_index_sup)
                 #np.loadtxt(file_index_sup, unpack=True, skiprows=2)
                 i1_inf = np.argmin(np.abs(lbda_inf-lbda1))
                 l1 = lbda_inf[i1_inf-1]
@@ -3470,34 +3697,41 @@ if calc_abs_map == 'Yes':
                 abs_opacity[k] = k1_inf*np.log(l2/lbda1)*np.log(size_file[index_sup]/bins[k]) \
                     + k2_inf*np.log(lbda1/l1)*np.log(size_file[index_sup]/bins[k]) \
                     + k1_sup*np.log(l2/lbda1)*np.log(bins[k]/size_file[index_inf]) \
-                    + k2_sup*np.log(lbda1/l1)*np.log(bins[k]/size_file[index_inf])
-                abs_opacity[k] /= ( np.log(l2/l1) * np.log(size_file[index_sup]/size_file[index_inf]) )
+                    + k2_sup*np.log(lbda1/l1) * \
+                    np.log(bins[k]/size_file[index_inf])
+                abs_opacity[k] /= (np.log(l2/l1) *
+                                   np.log(size_file[index_sup]/size_file[index_inf]))
             if (index_inf == nbfiles-1):
-                file_index_inf = opacdir+'/dustkappa_'+species+str(index_inf)+'.inp'
-                (lbda_inf, kappa_abs_inf, kappa_sca_inf, g_inf) = read_opacities(file_index_inf)
+                file_index_inf = opacdir+'/dustkappa_' + \
+                    species+str(index_inf)+'.inp'
+                (lbda_inf, kappa_abs_inf, kappa_sca_inf,
+                 g_inf) = read_opacities(file_index_inf)
                 #np.loadtxt(file_index_inf, unpack=True, skiprows=2)
                 i1_inf = np.argmin(np.abs(lbda_inf-lbda1))
                 l1 = lbda_inf[i1_inf-1]
                 l2 = lbda_inf[i1_inf+1]
                 k1_inf = kappa_abs_inf[i1_inf-1]
                 k2_inf = kappa_abs_inf[i1_inf+1]
-                abs_opacity[k] = (k1_inf*np.log(l2/lbda1) + k2_inf*np.log(lbda1/l1))/np.log(l2/l1)
+                abs_opacity[k] = (k1_inf*np.log(l2/lbda1) +
+                                  k2_inf*np.log(lbda1/l1))/np.log(l2/l1)
             # distinguish cases where index_inf = nbfiles-1 and index_inf >= nbfiles (extrapolation)
-            print('absorption opacity (pre-calc) [cm^2/g] of bin ',k,' with average size ', bins[k], ' = ',abs_opacity[k])
+            print('absorption opacity (pre-calc) [cm^2/g] of bin ', k,
+                  ' with average size ', bins[k], ' = ', abs_opacity[k])
 
     # kappa_abs as function of ibin, r and phi (2D array for each size bin)
-    abs_opacity_2D = np.zeros((nbin,nrad,nsec))
+    abs_opacity_2D = np.zeros((nbin, nrad, nsec))
     for i in range(nrad):
         for j in range(nsec):
-            abs_opacity_2D[:,i,j] = abs_opacity    # nbin, nrad, nsec
+            abs_opacity_2D[:, i, j] = abs_opacity    # nbin, nrad, nsec
 
     # Infer optical depth array
-    optical_depth = np.zeros(gas.data.shape)  # 2D array containing tau at each grid cell
-    optical_depth = np.sum(dustcube*abs_opacity_2D,axis=0)    # nrad, nsec
+    # 2D array containing tau at each grid cell
+    optical_depth = np.zeros(gas.data.shape)
+    optical_depth = np.sum(dustcube*abs_opacity_2D, axis=0)    # nrad, nsec
     # divide by cos(inclination) since integral over ds = cos(i) x integral over dz
     optical_depth /= np.abs(np.cos(inclination*np.pi/180.0))
-    optical_depth = optical_depth.reshape(nrad,nsec)
-    optical_depth = np.swapaxes(optical_depth,0,1)  # means nsec, nrad
+    optical_depth = optical_depth.reshape(nrad, nsec)
+    optical_depth = np.swapaxes(optical_depth, 0, 1)  # means nsec, nrad
 
     print('max(optical depth) = ', optical_depth.max())
 
@@ -3505,27 +3739,30 @@ if calc_abs_map == 'Yes':
     if Tdust_eq_Thydro == 'No':
         Temp = np.fromfile('dust_temperature.bdat', dtype='float64')
         Temp = Temp[4:]
-        Temp = Temp.reshape(nbin,nsec,ncol,nrad)
+        Temp = Temp.reshape(nbin, nsec, ncol, nrad)
         # Keep temperature of the largest dust species
-        Temp = Temp[-1,:,:,:]
+        Temp = Temp[-1, :, :, :]
         # Temperature in the midplane (ncol/2 given that the grid extends on both sides about the midplane)
         # is it the midplane temperature that should be adopted? or a vertically averaged temperature?
-        Tdust = Temp[:,ncol//2,:]+0.1  # avoid division by zero afterwards  (nsec, nrad)
+        # avoid division by zero afterwards  (nsec, nrad)
+        Tdust = Temp[:, ncol//2, :]+0.1
         # Free RAM memory
         del Temp
     else:
         Tdust = np.zeros(gas.data.shape)
-        Tdust = np.swapaxes(Tdust,0,1)   # means nsec, nrad
-        T_model = aspectratio*aspectratio*gas.cutemp*gas.rmed**(-1.0+2.0*flaringindex)  # in Kelvin
+        Tdust = np.swapaxes(Tdust, 0, 1)   # means nsec, nrad
+        T_model = aspectratio*aspectratio*gas.cutemp * \
+            gas.rmed**(-1.0+2.0*flaringindex)  # in Kelvin
         for j in range(nsec):
-            Tdust[j,:] = T_model
+            Tdust[j, :] = T_model
 
     # Now get Bnu(Tdust)
     # Frequency in Hz; wavelength is currently in mm
     nu = c / (wavelength*1e-1)
     # 2D array containing Bnu(Tdust) at each grid cell
     Bnu = np.zeros(gas.data.shape)
-    Bnu = 2.0*h*(nu**3.0)/c/c/(np.exp(h*nu/kB/Tdust)-1.0)  # in cgs: erg cm-2 sterad-1 = g s-2 ster-1
+    # in cgs: erg cm-2 sterad-1 = g s-2 ster-1
+    Bnu = 2.0*h*(nu**3.0)/c/c/(np.exp(h*nu/kB/Tdust)-1.0)
     # Specific intensity on the simulation's polar grid in Jy/steradian:
     Inu_polar = Bnu * (1.0 - np.exp(-optical_depth)) * 1e23   # nsec, nrad
 
@@ -3539,7 +3776,8 @@ if calc_abs_map == 'Yes':
     # x- and y- coordinates of image plane
     minxinterf = -R.max()
     maxxinterf = R.max()
-    xinterf = minxinterf + (maxxinterf-minxinterf)*np.arange(nbpixels)/(nbpixels-1)
+    xinterf = minxinterf + (maxxinterf-minxinterf) * \
+        np.arange(nbpixels)/(nbpixels-1)
     yinterf = xinterf
     dxy = abs(xinterf[1]-xinterf[0])
     xgrid = xinterf+0.5*dxy
@@ -3550,14 +3788,16 @@ if calc_abs_map == 'Yes':
     # (bilinear interpolation)
     phiangle_in_rad = phiangle*np.pi/180.0
     Inu_cart = np.zeros(nbpixels*nbpixels)
-    Inu_cart = Inu_cart.reshape(nbpixels,nbpixels)
+    Inu_cart = Inu_cart.reshape(nbpixels, nbpixels)
     for i in range(nbpixels):
         for j in range(nbpixels):
-            xc =  xgrid[i]*np.cos(phiangle_in_rad) + ygrid[j]*np.sin(phiangle_in_rad)
-            yc = -xgrid[i]*np.sin(phiangle_in_rad) + ygrid[j]*np.cos(phiangle_in_rad)
-            rc = np.sqrt( xc*xc + yc*yc )
-            if ( (rc >= R.min()) and (rc < R.max()) ):
-                phic = math.atan2(yc,xc) + np.pi  # result between 0 and 2pi
+            xc = xgrid[i]*np.cos(phiangle_in_rad) + \
+                ygrid[j]*np.sin(phiangle_in_rad)
+            yc = -xgrid[i]*np.sin(phiangle_in_rad) + \
+                ygrid[j]*np.cos(phiangle_in_rad)
+            rc = np.sqrt(xc*xc + yc*yc)
+            if ((rc >= R.min()) and (rc < R.max())):
+                phic = math.atan2(yc, xc) + np.pi  # result between 0 and 2pi
                 # expression for ir might not be general if simulation grid has an arithmetic spacing...
                 #ir = int(np.log(rc/R.min())/np.log(R.max()/R.min()) * (nrad-1.0))
                 ir = np.argmin(np.abs(R-rc))
@@ -3574,34 +3814,35 @@ if calc_abs_map == 'Yes':
                     Tjr = T[jr]
                 if (jr == nsec-1):
                     Tjrp1 = T.max()
-                    jrp1  = 0
+                    jrp1 = 0
                 else:
                     Tjrp1 = T[jr+1]
-                    jrp1  = jr+1
-                Inu_cart[j,i] = Inu_polar[jr,ir] * (R[ir+1]-rc) * (Tjrp1-phic) \
-                    + Inu_polar[jrp1,ir]   * (R[ir+1]-rc) * (phic - Tjr) \
-                    + Inu_polar[jr,ir+1]   * (rc - R[ir]) * (Tjrp1-phic) \
-                    + Inu_polar[jrp1,ir+1] * (rc - R[ir]) * (phic - Tjr)
-                Inu_cart[j,i] /= ( (R[ir+1]-R[ir])*(Tjrp1-Tjr) )
+                    jrp1 = jr+1
+                Inu_cart[j, i] = Inu_polar[jr, ir] * (R[ir+1]-rc) * (Tjrp1-phic) \
+                    + Inu_polar[jrp1, ir] * (R[ir+1]-rc) * (phic - Tjr) \
+                    + Inu_polar[jr, ir+1] * (rc - R[ir]) * (Tjrp1-phic) \
+                    + Inu_polar[jrp1, ir+1] * (rc - R[ir]) * (phic - Tjr)
+                Inu_cart[j, i] /= ((R[ir+1]-R[ir])*(Tjrp1-Tjr))
                 '''
                 if (Inu_cart[j,i] < 0):
                     sys.exit("Inu_cart < 0 in calc_abs_map: I must exit!")
                 '''
             else:
-                Inu_cart[j,i] = 0.0
+                Inu_cart[j, i] = 0.0
 
     # Then project with inclination along line of sight:
     # with xaxisflip, only needs to be changed, not y (checked!)
     inclination_in_rad = inclination*np.pi/180.0
     Inu_cart2 = np.zeros(nbpixels*nbpixels)
-    Inu_cart2 = Inu_cart2.reshape(nbpixels,nbpixels)
+    Inu_cart2 = Inu_cart2.reshape(nbpixels, nbpixels)
     for i in range(nbpixels):
         xc = xgrid[i]*np.cos(inclination_in_rad)   # || < xgrid[i]
         ir = int((xc-xgrid.min())/(xgrid.max()-xgrid.min()) * (nbpixels-1.0))
         if (ir < nbpixels-1):
-            Inu_cart2[:,i] = (Inu_cart[:,ir]*(xgrid[ir+1]-xc) + Inu_cart[:,ir+1]*(xc-xgrid[ir]))/(xgrid[ir+1]-xgrid[ir])
+            Inu_cart2[:, i] = (Inu_cart[:, ir]*(xgrid[ir+1]-xc) +
+                               Inu_cart[:, ir+1]*(xc-xgrid[ir]))/(xgrid[ir+1]-xgrid[ir])
         else:
-            Inu_cart2[:,i] = Inu_cart[:,nbpixels-1]
+            Inu_cart2[:, i] = Inu_cart[:, nbpixels-1]
 
     # recast things when no xaxisflip! (flip in both x and y, checked!)
     if xaxisflip == 'No':
@@ -3609,29 +3850,34 @@ if calc_abs_map == 'Yes':
         Inu_cart2 = np.flipud(np.fliplr(Inu_cart2_orig))
 
     # Finally do a rotation in the image plane by posangle
-    posangle_in_rad = (posangle+90.0)*np.pi/180.0     # add 90 degrees to be consistent with RADMC3D's convention for position angle
+    # add 90 degrees to be consistent with RADMC3D's convention for position angle
+    posangle_in_rad = (posangle+90.0)*np.pi/180.0
     Inu_cart3 = np.zeros(nbpixels*nbpixels)
-    Inu_cart3 = Inu_cart3.reshape(nbpixels,nbpixels)
+    Inu_cart3 = Inu_cart3.reshape(nbpixels, nbpixels)
     for i in range(nbpixels):
         for j in range(nbpixels):
-            xc =  xgrid[i]*np.cos(posangle_in_rad) + ygrid[j]*np.sin(posangle_in_rad)
-            yc = -xgrid[i]*np.sin(posangle_in_rad) + ygrid[j]*np.cos(posangle_in_rad)
-            ir = int((xc-xgrid.min())/(xgrid.max()-xgrid.min()) * (nbpixels-1.0))
-            jr = int((yc-ygrid.min())/(ygrid.max()-ygrid.min()) * (nbpixels-1.0))
-            if ( (ir >= 0) and (jr >= 0) and (ir < nbpixels-1) and (jr < nbpixels-1) ):
-                Inu_cart3[j,i] = Inu_cart2[jr,ir] * (xgrid[ir+1]-xc) * (ygrid[jr+1]-yc) \
-                    + Inu_cart2[jr+1,ir]   * (xgrid[ir+1]-xc) * (yc-ygrid[jr]) \
-                    + Inu_cart2[jr,ir+1]   * (xc-xgrid[ir]) * (ygrid[jr+1]-yc) \
-                    + Inu_cart2[jr+1,ir+1] * (xc-xgrid[ir]) * (yc-ygrid[jr])
-                Inu_cart3[j,i] /= ((xgrid[ir+1]-xgrid[ir]) * (ygrid[jr+1]-ygrid[jr]))
+            xc = xgrid[i]*np.cos(posangle_in_rad) + \
+                ygrid[j]*np.sin(posangle_in_rad)
+            yc = -xgrid[i]*np.sin(posangle_in_rad) + \
+                ygrid[j]*np.cos(posangle_in_rad)
+            ir = int((xc-xgrid.min())/(xgrid.max() -
+                     xgrid.min()) * (nbpixels-1.0))
+            jr = int((yc-ygrid.min())/(ygrid.max() -
+                     ygrid.min()) * (nbpixels-1.0))
+            if ((ir >= 0) and (jr >= 0) and (ir < nbpixels-1) and (jr < nbpixels-1)):
+                Inu_cart3[j, i] = Inu_cart2[jr, ir] * (xgrid[ir+1]-xc) * (ygrid[jr+1]-yc) \
+                    + Inu_cart2[jr+1, ir] * (xgrid[ir+1]-xc) * (yc-ygrid[jr]) \
+                    + Inu_cart2[jr, ir+1] * (xc-xgrid[ir]) * (ygrid[jr+1]-yc) \
+                    + Inu_cart2[jr+1, ir+1] * (xc-xgrid[ir]) * (yc-ygrid[jr])
+                Inu_cart3[j, i] /= ((xgrid[ir+1]-xgrid[ir])
+                                    * (ygrid[jr+1]-ygrid[jr]))
             else:
-                if ( (ir >= nbpixels-1) and (jr < nbpixels-1) ):
-                    Inu_cart3[j,i] = 0.0 # Inu_cart2[jr-1,nbpixels-1]
-                if ( (jr >= nbpixels-1) and (ir < nbpixels-1) ):
-                    Inu_cart3[j,i] = 0.0 # Inu_cart2[nbpixels-1,ir-1]
-                if ( (ir >= nbpixels-1) and (jr >= nbpixels-1) ):
-                    Inu_cart3[j,i] = 0.0 # Inu_cart2[nbpixels-1,nbpixels-1]
-
+                if ((ir >= nbpixels-1) and (jr < nbpixels-1)):
+                    Inu_cart3[j, i] = 0.0  # Inu_cart2[jr-1,nbpixels-1]
+                if ((jr >= nbpixels-1) and (ir < nbpixels-1)):
+                    Inu_cart3[j, i] = 0.0  # Inu_cart2[nbpixels-1,ir-1]
+                if ((ir >= nbpixels-1) and (jr >= nbpixels-1)):
+                    Inu_cart3[j, i] = 0.0  # Inu_cart2[nbpixels-1,nbpixels-1]
 
     # Inu contains the specific intensity in Jy/steradian projected onto the image plane
     Inu = Inu_cart3
@@ -3645,18 +3891,19 @@ if calc_abs_map == 'Yes':
     # Add white (Gaussian) noise to raw flux image to simulate effects of 'thermal' noise
     if add_noise == 'Yes':
         # beam area in pixel^2
-        beam =  (np.pi/(4.*np.log(2.)))*bmaj*bmin/(dxy**2.)
+        beam = (np.pi/(4.*np.log(2.)))*bmaj*bmin/(dxy**2.)
         # noise standard deviation in Jy per pixel (I've checked the expression below works well)
         noise_dev_std_Jy_per_pixel = noise_dev_std / np.sqrt(0.5*beam)  # 1D
         # noise array
-        noise_array = np.random.normal(0.0,noise_dev_std_Jy_per_pixel,size=nbpixels*nbpixels)
-        noise_array = noise_array.reshape(nbpixels,nbpixels)
+        noise_array = np.random.normal(
+            0.0, noise_dev_std_Jy_per_pixel, size=nbpixels*nbpixels)
+        noise_array = noise_array.reshape(nbpixels, nbpixels)
         Inu += noise_array
 
     # pixel (cell) size in arcseconds
     dxy *= (gas.culength/1.5e11/distance)
     # beam area in pixel^2
-    beam =  (np.pi/(4.*np.log(2.)))*bmaj*bmin/(dxy**2.)
+    beam = (np.pi/(4.*np.log(2.)))*bmaj*bmin/(dxy**2.)
     # stdev lengths in pixel
     stdev_x = (bmaj/(2.*np.sqrt(2.*np.log(2.)))) / dxy
     stdev_y = (bmin/(2.*np.sqrt(2.*np.log(2.)))) / dxy
@@ -3664,7 +3911,7 @@ if calc_abs_map == 'Yes':
     # check beam is correctly handled by inserting a source point at the
     # origin of the raw intensity image
     if check_beam == 'Yes':
-        Inu[nbpixels//2-1,nbpixels//2-1] = 500.0*Inu.max()
+        Inu[nbpixels//2-1, nbpixels//2-1] = 500.0*Inu.max()
 
     # Call to Gauss_filter function
     print('convolution...')
@@ -3686,7 +3933,7 @@ if calc_abs_map == 'Yes':
     hdu.header['NAXIS'] = 2
     hdu.header['NAXIS1'] = nbpixels
     hdu.header['NAXIS2'] = nbpixels
-    hdu.header['EPOCH']  = 2000.0
+    hdu.header['EPOCH'] = 2000.0
     hdu.header['EQUINOX'] = 2000.0
     hdu.header['LONPOLE'] = 180.0
     hdu.header['CTYPE1'] = 'RA---TAN'
@@ -3712,10 +3959,10 @@ if calc_abs_map == 'Yes':
     hdu.data = convolved_Inu
     inbasename = os.path.basename('./'+outfile)
     if add_noise == 'Yes':
-        substr='_wn'+str(noise_dev_std)+'_JyBeam2D.fits'
-        jybeamfileout=re.sub('.fits', substr, inbasename)
+        substr = '_wn'+str(noise_dev_std)+'_JyBeam2D.fits'
+        jybeamfileout = re.sub('.fits', substr, inbasename)
     else:
-        jybeamfileout=re.sub('.fits', '_JyBeam2D.fits', inbasename)
+        jybeamfileout = re.sub('.fits', '_JyBeam2D.fits', inbasename)
     hdu.writeto(jybeamfileout, overwrite=True)
 
     # --------------------
@@ -3723,11 +3970,11 @@ if calc_abs_map == 'Yes':
     # --------------------
     matplotlib.rcParams.update({'font.size': 20})
     matplotlib.rc('font', family='Arial')
-    fontcolor='white'
+    fontcolor = 'white'
 
     # name of pdf file for final image
     fileout = re.sub('.fits', '.pdf', jybeamfileout)
-    fig = plt.figure(figsize=(8.,8.))
+    fig = plt.figure(figsize=(8., 8.))
     plt.subplots_adjust(left=0.17, right=0.92, top=0.88, bottom=0.1)
     ax = plt.gca()
 
@@ -3736,30 +3983,32 @@ if calc_abs_map == 'Yes':
     # east is to the left), while Dec offset increases from
     # bottom to top (ie, north is the top).
     # CB: do not remove the multiplication by |cos(inclination)| !
-    a0 = -xgrid[0]*gas.culength/1.5e11/distance*np.abs(np.cos(inclination_in_rad))   # >0
+    a0 = -xgrid[0]*gas.culength/1.5e11/distance * \
+        np.abs(np.cos(inclination_in_rad))   # >0
     a1 = -a0
-    #a1 = -xgrid[nbpixels-1]*gas.culength/1.5e11/distance*np.abs(np.cos(inclination_in_rad))    # <0
-    d0 = xgrid[0]*gas.culength/1.5e11/distance*np.abs(np.cos(inclination_in_rad))    # <0
+    # a1 = -xgrid[nbpixels-1]*gas.culength/1.5e11/distance*np.abs(np.cos(inclination_in_rad))    # <0
+    d0 = xgrid[0]*gas.culength/1.5e11/distance * \
+        np.abs(np.cos(inclination_in_rad))    # <0
     d1 = -d0
-    #d1 = xgrid[nbpixels-1]*gas.culength/1.5e11/distance*np.abs(np.cos(inclination_in_rad))    # >0
+    # d1 = xgrid[nbpixels-1]*gas.culength/1.5e11/distance*np.abs(np.cos(inclination_in_rad))    # >0
     # da positive definite
     if (minmaxaxis < abs(a0)):
         da = minmaxaxis
     else:
-        da = maximum(abs(a0),abs(a1))
+        da = maximum(abs(a0), abs(a1))
 
-    ax.set_xlim(da,-da)      # x (=R.A.) increases leftward
+    ax.set_xlim(da, -da)      # x (=R.A.) increases leftward
     mina = da
     maxa = -da
     xlambda = mina - 0.166*da
-    ax.set_ylim(-da,da)
-    #plt.ylim(-da,da)
+    ax.set_ylim(-da, da)
+    # plt.ylim(-da,da)
     dmin = -da
     dmax = da
 
     # x- and y-ticks and labels
-    ax.tick_params(top='on', right='on', length = 5, width=1.0, direction='out')
-    #ax.set_yticks(ax.get_xticks())    # set same ticks in x and y in cartesian
+    ax.tick_params(top='on', right='on', length=5, width=1.0, direction='out')
+    # ax.set_yticks(ax.get_xticks())    # set same ticks in x and y in cartesian
     ax.set_xlabel('RA offset [arcsec]')
     ax.set_ylabel('Dec offset [arcsec]')
 
@@ -3767,21 +4016,25 @@ if calc_abs_map == 'Yes':
     # interpolation='none'
     min = convolved_Inu.min()
     max = convolved_Inu.max()
-    CM = ax.imshow(convolved_Inu, origin='lower', cmap=mycolormap, interpolation='bilinear', extent=[a0,a1,d0,d1], vmin=min, vmax=max, aspect='auto')
+    CM = ax.imshow(convolved_Inu, origin='lower', cmap=mycolormap, interpolation='bilinear', extent=[
+                   a0, a1, d0, d1], vmin=min, vmax=max, aspect='auto')
 
     # Add wavelength in top-left corner
-    strlambda = '$\lambda$='+str(round(wavelength, 2))+'mm' # round to 2 decimals
+    strlambda = '$\lambda$=' + \
+        str(round(wavelength, 2))+'mm'  # round to 2 decimals
     if wavelength < 0.01:
-        strlambda = '$\lambda$='+str(round(wavelength*1e3,2))+'$\mu$m'
+        strlambda = '$\lambda$='+str(round(wavelength*1e3, 2))+'$\mu$m'
     if RTdust_or_gas == 'dust':
-        ax.text(xlambda,dmax-0.166*da,strlambda, fontsize=20, color = 'white', weight='bold')
+        ax.text(xlambda, dmax-0.166*da, strlambda,
+                fontsize=20, color='white', weight='bold')
 
     # Add + sign at the origin
-    ax.plot(0.0,0.0,'+',color='white',markersize=10)
+    ax.plot(0.0, 0.0, '+', color='white', markersize=10)
 
     # plot beam
     from matplotlib.patches import Ellipse
-    e = Ellipse(xy=[xlambda,dmin+0.166*da], width=bmin, height=bmaj, angle=bpaangle+90.0)
+    e = Ellipse(xy=[xlambda, dmin+0.166*da], width=bmin,
+                height=bmaj, angle=bpaangle+90.0)
     e.set_clip_box(ax.bbox)
     e.set_facecolor('white')
     e.set_alpha(0.8)
@@ -3791,7 +4044,7 @@ if calc_abs_map == 'Yes':
     from mpl_toolkits.axes_grid1 import make_axes_locatable
     divider = make_axes_locatable(ax)
     cax = divider.append_axes("top", size="2.5%", pad=0.12)
-    cb =  plt.colorbar(CM, cax=cax, orientation='horizontal')
+    cb = plt.colorbar(CM, cax=cax, orientation='horizontal')
     cax.xaxis.tick_top()
     cax.xaxis.set_tick_params(labelsize=20, direction='out')
     # title on top
@@ -3807,24 +4060,24 @@ if calc_abs_map == 'Yes':
     # =====================
     if deproj_polar == 'Yes':
         currentdir = os.getcwd()
-        alpha_min = 0.;          # deg, PA of offset from the star
-        Delta_min = 0.;          # arcsec, amplitude of offset from the star
+        alpha_min = 0.          # deg, PA of offset from the star
+        Delta_min = 0.          # arcsec, amplitude of offset from the star
         RA = 0.0  # if input image is a prediction, star should be at the center
-        DEC = 0.0 # note that this deprojection routine works in WCS coordinates
+        DEC = 0.0  # note that this deprojection routine works in WCS coordinates
         cosi = np.cos(inclination_input*np.pi/180.)
 
-        print('deprojection around PA [deg] = ',posangle)
-        print('and inclination [deg] = ',inclination_input)
+        print('deprojection around PA [deg] = ', posangle)
+        print('and inclination [deg] = ', inclination_input)
 
         # makes a new directory "deproj_polar_dir" and calculates a number
         # of products: copy of the input image [_fullim], centered at
         # (RA,DEC) [_centered], deprojection by cos(i) [_stretched], polar
         # image [_polar], etc. Also, a _radial_profile which is the
         # average radial intensity.
-        exec_polar_expansions(jybeamfileout,'deproj_polar_dir',posangle,cosi,RA=RA,DEC=DEC,
+        exec_polar_expansions(jybeamfileout, 'deproj_polar_dir', posangle, cosi, RA=RA, DEC=DEC,
                               alpha_min=alpha_min, Delta_min=Delta_min,
-                              XCheckInv=False,DoRadialProfile=False,
-                              DoAzimuthalProfile=False,PlotRadialProfile=False,
+                              XCheckInv=False, DoRadialProfile=False,
+                              DoAzimuthalProfile=False, PlotRadialProfile=False,
                               zoomfactor=1.)
 
         # Save polar fits in current directory
@@ -3843,27 +4096,29 @@ if calc_abs_map == 'Yes':
             jshift = int(nbpixels/4)
         else:
             jshift = int(nbpixels/4)
-        convolved_intensity = np.roll(convolved_intensity, shift=-jshift, axis=1)
+        convolved_intensity = np.roll(
+            convolved_intensity, shift=-jshift, axis=1)
 
         # -------------------------------
         # plot image in polar coordinates
         # -------------------------------
         fileout = re.sub('.fits', '.pdf', filein)
-        fig = plt.figure(figsize=(8.,8.))
+        fig = plt.figure(figsize=(8., 8.))
         plt.subplots_adjust(left=0.15, right=0.96, top=0.88, bottom=0.09)
         ax = plt.gca()
 
         # Set x- and y-ranges
-        ax.set_xlim(-180,180)          # PA relative to Clump 1's
-        if (minmaxaxis < maximum(abs(a0),abs(a1))):
+        ax.set_xlim(-180, 180)          # PA relative to Clump 1's
+        if (minmaxaxis < maximum(abs(a0), abs(a1))):
             ymax = minmaxaxis
         else:
-            ymax = maximum(abs(a0),abs(a1))
-        ax.set_ylim(0,ymax)      # Deprojected radius in arcsec
+            ymax = maximum(abs(a0), abs(a1))
+        ax.set_ylim(0, ymax)      # Deprojected radius in arcsec
 
-        ax.tick_params(top='on', right='on', length = 5, width=1.0, direction='out')
-        #ax.set_yticks((0.0,0.1,0.2,0.3,0.4,0.5,0.6,0.7))
-        ax.set_xticks((-180,-120,-60,0,60,120,180))
+        ax.tick_params(top='on', right='on', length=5,
+                       width=1.0, direction='out')
+        # ax.set_yticks((0.0,0.1,0.2,0.3,0.4,0.5,0.6,0.7))
+        ax.set_xticks((-180, -120, -60, 0, 60, 120, 180))
         ax.set_xlabel('Position angle [deg]')
         ax.set_ylabel('Radius [arcsec]')
 
@@ -3871,20 +4126,23 @@ if calc_abs_map == 'Yes':
         # interpolation='none'
         min = convolved_intensity.min()  # not exactly same as 0
         max = convolved_intensity.max()
-        CM = ax.imshow(convolved_intensity, origin='lower', cmap=mycolormap, interpolation='bilinear', extent=[-180,180,0,maximum(abs(a0),abs(a1))], vmin=min, vmax=max, aspect='auto')   # (left, right, bottom, top)
+        CM = ax.imshow(convolved_intensity, origin='lower', cmap=mycolormap, interpolation='bilinear', extent=[
+                       -180, 180, 0, maximum(abs(a0), abs(a1))], vmin=min, vmax=max, aspect='auto')   # (left, right, bottom, top)
 
         # Add wavelength in bottom-left corner
-        strlambda = '$\lambda$='+str(round(wavelength, 2))+'mm' # round to 2 decimals
+        strlambda = '$\lambda$=' + \
+            str(round(wavelength, 2))+'mm'  # round to 2 decimals
         if wavelength < 0.01:
-            strlambda = '$\lambda$='+str(round(wavelength*1e3,2))+'$\mu$m'
+            strlambda = '$\lambda$='+str(round(wavelength*1e3, 2))+'$\mu$m'
         if RTdust_or_gas == 'dust':
-            ax.text(60,0.02,strlambda,fontsize=16,color='white',weight='bold')
+            ax.text(60, 0.02, strlambda, fontsize=16,
+                    color='white', weight='bold')
 
         # plot color-bar
         from mpl_toolkits.axes_grid1 import make_axes_locatable
         divider = make_axes_locatable(ax)
         cax = divider.append_axes("top", size="2.5%", pad=0.12)
-        cb =  plt.colorbar(CM, cax=cax, orientation='horizontal')
+        cb = plt.colorbar(CM, cax=cax, orientation='horizontal')
         cax.xaxis.tick_top()
         cax.xaxis.set_tick_params(labelsize=20, direction='out')
         # title on top
