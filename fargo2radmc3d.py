@@ -86,7 +86,7 @@ h = 6.6261e-27                 # [h = Planck constant] = g cm2 s-1
 
 class pload(object):
     # based on A. Mignone routine
-    def __init__(self, ns, w_dir=None, datatype=None, level=0, x1range=None, x2range=None, x3range=None):
+    def __init__(self, ns, nsec=600, w_dir=None, datatype=None, level=0, x1range=None, x2range=None, x3range=None):
         """Loads the data.
         **Inputs**:
           ns -- Step Number of the data file w_dir -- path to the directory which has the data files\n
@@ -138,19 +138,10 @@ class pload(object):
            timefile -- name of the out file which has timing information. 
         """
 
-        # if (self.datatype == 'hdf5'):
         fh5 = h5.File(timefile, 'r')
         self.SimTime = fh5.attrs.get('time')
-        # self.Dt = 1.e-2 # Should be erased later given the level in AMR
+        self.Dt = 1.e-2
         fh5.close()
-        # else:
-        #    ns = self.NStep
-        #    f_var = open(timefile, "r")
-        #    tlist = []
-        #    for line in f_var.readlines():
-        #        tlist.append(line.split())
-        #    self.SimTime = float(tlist[ns][1])
-        #    self.Dt = float(tlist[ns][2])
 
     def keys(self, f):
         return [key for key in f.keys()]
@@ -160,16 +151,6 @@ class pload(object):
         **Inputs**:
           varfile -- name of the out file which has variable information. 
         """
-
-        # if (self.datatype == 'hdf5'):
-        #    fh5 = h5.File(varfile,'r')
-        #    self.filetype = 'single_file'
-        #    self.endianess = '>' # not used with AMR, kept for consistency
-        #    self.vars = []
-        #    for iv in range(fh5.attrs.get('num_components')):
-        #        self.vars.append(fh5.attrs.get('component_'+str(iv)))
-        #    fh5.close()
-        # elif (self.datatype == 'dbl.h5'):
         print(varfile)
         fh5 = h5.File(varfile, 'r')
         self.filetype = 'single_file'
@@ -179,13 +160,6 @@ class pload(object):
             self.vars.append(self.keys(fh5['Timestep_300/vars'])[iv])
 
         fh5.close()
-        # else:
-        #    vfp = open(varfile, "r")
-        #    varinfo = vfp.readline().split()
-        #    self.filetype = varinfo[4]
-        #    self.endianess = varinfo[5]
-        #    self.vars = varinfo[6:]
-        #    vfp.close()
 
     def ReadGridFile(self, gridfile):
         """ Read grid values from the grid.out file.
@@ -357,53 +331,6 @@ class pload(object):
         OutDict.update(h5vardict)
         return OutDict
 
-    def DataScan(self, fp, n1, n2, n3, endian, dtype, off=None):
-        """ Scans the data files in all formats. 
-
-        **Inputs**:
-
-          fp -- Data file pointer\n
-          n1 -- No. of points in X1 direction\n
-          n2 -- No. of points in X2 direction\n
-          n3 -- No. of points in X3 direction\n
-          endian -- Endianess of the data\n
-          dtype -- datatype, eg : double, float, vtk, hdf5\n
-          off -- offset (for avoiding staggered B fields) 
-
-        **Output**:
-
-          Dictionary consisting of variable names as keys and its values. 
-
-        """
-
-        if off is not None:
-            off_fmt = endian+str(off)+dtype
-            nboff = np.dtype(off_fmt).itemsize
-            fp.read(nboff)
-
-        n1_tot = self.n1_tot
-        n2_tot = self.n2_tot
-        n3_tot = self.n3_tot
-
-        A = array.array(dtype)
-        fmt = endian+str(n1_tot*n2_tot*n3_tot)+dtype
-        nb = np.dtype(fmt).itemsize
-        A.fromstring(fp.read(nb))
-
-        if (self.Slice):
-            darr = np.zeros((n1*n2*n3))
-            indxx = np.sort([n3_tot*n2_tot*k + j*n2_tot +
-                            i for i in self.irange for j in self.jrange for k in self.krange])
-            if (sys.byteorder != self.endianess):
-                A.byteswap()
-            for ii, iii in enumerate(indxx):
-                darr[ii] = A[iii]
-            darr = [darr]
-        else:
-            darr = np.frombuffer(A, dtype=np.dtype(fmt))
-
-        return np.reshape(darr[0], self.nshp).transpose()
-
     def ReadSingleFile(self, datafilename, myvars, n1, n2, n3, endian, dtype, ddict):
         """Reads a single data file, data.****.dtype.
 
@@ -423,70 +350,15 @@ class pload(object):
 
           Updated Dictionary consisting of variable names as keys and its values.
         """
-        # if self.datatype == 'hdf5':
+
         fp = h5.File(datafilename, 'r')
-        # else:
-        #    fp = open(datafilename, "rb")
 
         print("Reading Data file : %s" % datafilename)
 
-#        if self.datatype == 'vtk':
-#            vtkd = self.DataScanVTK(fp, n1, n2, n3, endian, dtype)
-#            ddict.update(vtkd)
-#        elif self.datatype == 'hdf5':
-#            h5d = self.DataScanHDF5(fp,myvars,self.level)
-#            ddict.update(h5d)
-#        elif self.datatype == 'dbl.h5':
         h5d = self.DataScanHDF5(fp, myvars)
         ddict.update(h5d)
-#        else:
-#            for i in range(len(myvars)):
-#                if myvars[i] == 'bx1s':
-#                    ddict.update({myvars[i]: self.DataScan(fp, n1, n2, n3, endian,
-#                                                           dtype, off=n2*n3)})
-#                elif myvars[i] == 'bx2s':
-#                    ddict.update({myvars[i]: self.DataScan(fp, n1, n2, n3, endian,
-#                                                           dtype, off=n3*n1)})
-#                elif myvars[i] == 'bx3s':
-#                    ddict.update({myvars[i]: self.DataScan(fp, n1, n2, n3, endian,
-#                                                           dtype, off=n1*n2)})
-#                else:
-#                    ddict.update({myvars[i]: self.DataScan(fp, n1, n2, n3, endian,
-#                                                           dtype)})
 
         fp.close()
-
-    def ReadMultipleFiles(self, nstr, dataext, myvars, n1, n2, n3, endian,
-                          dtype, ddict):
-        """Reads a  multiple data files, varname.****.dataext.
-
-        **Inputs**:
-
-          nstr -- File number in form of a string\n
-          dataext -- Data type of the file, e.g., 'dbl', 'flt' or 'vtk' \n
-          myvars -- List of variable names to be read\n
-          n1 -- No. of points in X1 direction\n
-          n2 -- No. of points in X2 direction\n
-          n3 -- No. of points in X3 direction\n
-          endian -- Endianess of the data\n
-          dtype -- datatype\n
-          ddict -- Dictionary containing Grid and Time Information
-          which is updated.
-
-        **Output**:
-
-          Updated Dictionary consisting of variable names as keys and its values.
-
-        """
-        for i in range(len(myvars)):
-            datafilename = self.wdir+myvars[i]+"."+nstr+dataext
-            fp = open(datafilename, "rb")
-            if self.datatype == 'vtk':
-                ddict.update(self.DataScanVTK(fp, n1, n2, n3, endian, dtype))
-            else:
-                ddict.update({myvars[i]: self.DataScan(fp, n1, n2, n3, endian,
-                                                       dtype)})
-            fp.close()
 
     def ReadDataFile(self, num):
         """Reads the data file generated from PLUTO code.
@@ -502,36 +374,16 @@ class pload(object):
 
         """
         gridfile = self.wdir+"grid.out"
-        # if self.datatype == "float":
-        #    dtype = "f"
-        #    varfile = self.wdir+"flt.out"
-        #    dataext = ".flt"
-        # elif self.datatype == "vtk":
-        #    dtype = "f"
-        #    varfile = self.wdir+"vtk.out"
-        #    dataext=".vtk"
-        # elif self.datatype == 'hdf5':
-        #    dtype = 'd'
-        #    dataext = '.hdf5'
-        #    nstr = num
-        #    varfile = self.wdir+"data."+nstr+dataext
-        # elif self.datatype == 'h5':
         dtype = 'd'
         dataext = '.dbl.h5'
         nstr = num
         varfile = self.wdir+"data."+nstr+dataext
-        # else:
-        #    dtype = "d"
-        #    varfile = self.wdir+"dbl.out"
-        #    dataext = ".dbl"
 
         self.ReadVarFile(varfile)
         self.ReadGridFile(gridfile)
         self.ReadTimeInfo(varfile)
         nstr = num
         if self.endianess == 'big':
-            endian = ">"
-        elif self.datatype == 'vtk':
             endian = ">"
         else:
             endian = "<"
@@ -544,25 +396,15 @@ class pload(object):
              ('filetype', self.filetype)]
         ddict = dict(D)
 
-        if self.filetype == "single_file":
-            datafilename = self.wdir+"data."+nstr+dataext
-            self.ReadSingleFile(datafilename, self.vars, self.n1, self.n2,
-                                self.n3, endian, dtype, ddict)
-        elif self.filetype == "multiple_files":
-            self.ReadMultipleFiles(nstr, dataext, self.vars, self.n1, self.n2,
-                                   self.n3, endian, dtype, ddict)
-        else:
-            print("Wrong file type : CHECK pluto.ini for file type.")
-            print("Only supported are .dbl, .flt, .vtk, .hdf5")
-            sys.exit()
+        datafilename = self.wdir+"data."+nstr+dataext
+        self.ReadSingleFile(datafilename, self.vars, self.n1, self.n2,
+                            self.n3, endian, dtype, ddict)
 
         return ddict
 
 # -------------------------------------------------------------------
-# building mesh arrays for theta, r, phi (x, y, z)
+# building mesh arrays for phi, theta, r (x, y, z)
 # -------------------------------------------------------------------
-
-
 class Mesh():
     # based on P. Benitez Llambay routine
     """
@@ -593,7 +435,9 @@ class Mesh():
             # radial interfaces of grid cells
             domain_rad = np.loadtxt(
                 fname=directory+"grid.out", skiprows=11, usecols=1, max_rows=self.nrad)
-            domain_rad = np.append(domain_rad, 100.)
+            last = np.loadtxt(
+                fname=directory+"grid.out", skiprows=11+self.nrad-1, usecols=2, max_rows=1)
+            domain_rad = np.append(domain_rad, last)
         except IOError:
             print('IOError')
 
@@ -615,6 +459,9 @@ class Mesh():
         try:
             domain_th = np.loadtxt(fname=directory+"grid.out", skiprows=10+1+self.nrad+1,
                                    usecols=1, max_rows=self.ncol)  # radial interfaces of grid cells
+            last = np.loadtxt(
+                fname=directory+"grid.out", skiprows=11+self.nrad-1, usecols=2, max_rows=1)
+            domain_th = np.append(domain_th, last)
         except IOError:
             print('IOError')
 
@@ -2319,7 +2166,7 @@ if RTdust_or_gas == 'dust' and recalc_density == 'Yes':
         for k in range(nsec):
             for j in range(ncol):
                 for i in range(nrad):
-                    DUSTOUT.write(str(rhodustcube[j, ibin, i, k])+' \n')
+                    DUSTOUT.write(str(rhodustcube[j, ibin, k, i])+' \n')
 
     # print max of dust's mass volume density at each colatitude
     for j in range(ncol):
