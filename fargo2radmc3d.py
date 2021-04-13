@@ -17,19 +17,10 @@
 #
 #     Order in RADMC3D
 #        x y z = r (spherical) theta (colatitude) phi (azimuth)
-#     Order in FARGO2D
-#        x y = azimuth radius (cylindrical)
+#     Order in PLUTO
+#        x y z = phi (azimuth) theta (colatitude) r (spherical)
 #
 # ===================================================================
-
-# =========================================
-#            TO DO LIST
-# =========================================
-# - results from actual 3D simulations from Fargo3D (check fargo2python)
-# - check again that all goes well without x-axisflip!
-# - split main file into several more readible files...
-# =========================================
-
 
 # -----------------------------
 # Requires librairies
@@ -459,7 +450,7 @@ class Mesh():
             domain_th = np.loadtxt(fname=directory+"grid.out", skiprows=10+1+self.nrad+1,
                                    usecols=1, max_rows=self.ncol)  # radial interfaces of grid cells
             last = np.loadtxt(
-                fname=directory+"grid.out", skiprows=11+self.nrad-1, usecols=2, max_rows=1)
+                fname=directory+"grid.out", skiprows=10+1+self.nrad+self.ncol, usecols=2, max_rows=1)
             domain_th = np.append(domain_th, last)
         except IOError:
             print('IOError')
@@ -1830,11 +1821,11 @@ print('Mgas / Mstar= '+str(Mgas)+' and Mgas [kg] = '+str(Mgas*gas.cumass))
 
 # Allocate arrays
 dust = np.zeros((nsec*ncol*nrad*nbin))
-if fargo3d == 'No' or polarized_scat == 'Yes':
-    bins = np.logspace(np.log10(amin), np.log10(amax), nbin+1)
-    nparticles = np.zeros(nbin)     # number of particles per bin size
-    # average Stokes number of particles per bin size
-    avgstokes = np.zeros(nbin)
+#bins = np.logspace(np.log10(amin), np.log10(amax), nbin+1)
+bins = np.asarray([0.00005, 0.0005, 0.005, 0.05, 0.2, 0.4, 2, 4, 50, 500, 5000])
+nparticles = np.zeros(nbin)     # number of particles per bin size
+# average Stokes number of particles per bin size
+avgstokes = np.zeros(nbin)
 
 # Color map
 mycolormap = 'nipy_spectral'
@@ -1857,46 +1848,47 @@ if (mem_array_gib/mem_gib > 0.5):
 # =========================
 print('--------- computing dust surface density ----------')
 
-# -------------------------
-# a) Case with no polarized scattering: we infer the dust's surface
-# density from the results of the gas+dust hydrodynamical simulation
-# -------------------------
-
-# -  -  -  -  -  -  -  -  -  -  -  -  -  -
-# CASE 1: FARGO2D simulation (Lagrangian particles)
-# -  -  -  -  -  -  -  -  -  -  -  -  -  -
 if (RTdust_or_gas == 'dust' and recalc_density == 'Yes' and polarized_scat == 'No' and fargo3d == 'No'):
 
     # read information on the dust particles
     #(rad, azi, vr, vt, Stokes, a) = np.loadtxt(dir+'/dustsystat'+str(on)+'.dat', unpack=True)
     pdata = Particles(ns=9, directory=dir)
     rad = pdata.pos_x
-    azi = pdata.pos_z
+    azi = pdata.pos_y
     vr = pdata.vel_x
-    vt = pdata.vel_z
+    vt = pdata.vel_y
     Stokes = pdata.tstop
     a = pdata.radius
 
     # Populate dust bins
-    for m in range(len(rad)):   # CB: sum over dust particles
+    for m in range(len(rad)):   # sum over dust particles
         r = rad[m]
         t = azi[m]
         # radial index of the cell where the particle is
-        i = pdata.pcell_x[m]
+        i = int(np.log(r/gas.redge.min())/np.log(gas.redge.max()/gas.redge.min()) * nrad)
         if (i < 0 or i >= nrad+2):
             sys.exit('pb with i = ', i, ' in recalc_density step: I must exit!')
+
+        # polar index of the cell where the particles is
+        j = ncol - 1 - int(np.log((np.pi-t)/(np.pi-gas.tedge.max()))/np.log((np.pi-gas.tedge.min())/(np.pi-gas.tedge.max())) * ncol)
+        #print(j,gas.tmed[j],t)
+        #print(gas.tmed[j],pdata.pos_y[m])
+        if (j < 0 or j >= ncol+2):
+            sys.exit('pb with j = ', j, ' in recalc_density step: I must exit!')
+  
         # azimuthal index of the cell where the particle is
         # (general expression since grid spacing in azimuth is always arithmetic)
-        j = pdata.pcell_z[m]-2
-        if (j < 0 or j >= nsec):
-            sys.exit('pb with j = ', j, ' in recalc_density step: I must exit!')
+        k = pdata.pcell_z[m]
+        if (k < 0 or k >= nsec+2):
+            sys.exit('pb with k = ', k, ' in recalc_density step: I must exit!')
         # particle size
         pcsize = a[m]
+
         # find out which bin particle belongs to
         ibin = int(np.log(pcsize/bins.min()) /
                    np.log(bins.max()/bins.min()) * nbin)
         if (ibin >= 0 and ibin < nbin):
-            k = ibin*nsec*nrad + j*nrad + i
+            k = ibin*nsec*ncol*nrad + k*ncol*nrad + j*nrad + i
             dust[k] += 1
             nparticles[ibin] += 1
             avgstokes[ibin] += Stokes[m]
@@ -1910,6 +1902,11 @@ if (RTdust_or_gas == 'dust' and recalc_density == 'Yes' and polarized_scat == 'N
 
     # dustcube currently contains N_i (r,phi), the number of particles per bin size in every grid cell
     dustcube = dust.reshape(nbin, nsec, ncol, nrad)
+    #for ibin in range(nbin):
+    #    for i in range(nrad):
+    #        for j in range(ncol):
+    #            if (dustcube[ibin,2,j,i]>0):
+    #                print(ibin,i,nrad,j,ncol,gas.rmed[i],gas.tmed[j],dustcube[0,2,j,i])
     # dustcube = np.swapaxes(dustcube,1,2)  # means nbin, nrad, nsec
 
     frac = np.zeros(nbin)
@@ -1957,108 +1954,10 @@ if (RTdust_or_gas == 'dust' and recalc_density == 'Yes' and polarized_scat == 'N
     print(
         'Maximum dust surface density [in g/cm^2] is ', dust_surface_density.max())
 
-
-# -  -  -  -  -  -  -  -  -  -  -  -  -  -
-# CASE 2: FARGO3D simulation (dust fluids)
-# -  -  -  -  -  -  -  -  -  -  -  -  -  -
-if (RTdust_or_gas == 'dust' and recalc_density == 'Yes' and polarized_scat == 'No' and fargo3d == 'Yes'):
-
-    dustcube = dust.reshape(nbin, nsec, nrad)
-    dustcube = np.swapaxes(dustcube, 1, 2)  # means nbin, nrad, nsec
-
-    for ibin in range(len(dust_id)):
-
-        fileread = 'dust'+str(int(dust_id[ibin]))+'dens'+str(on)+'.dat'
-        #print('ibin = ', ibin, ', read file = ',fileread)
-
-        # directly read dust surface density for each dust fluid in code units
-        dustcube[ibin, :, :] = Field(field=fileread, directory=dir).data
-
-        # conversion in g/cm^2
-        # dimensions: nbin, nrad, nsec
-        dustcube[ibin, :, :] *= (gas.cumass*1e3)/((gas.culength*1e2)**2.)
-
-        # decrease dust surface density inside mask radius
-        # NB: mask_radius is in arcseconds
-        rmask_in_code_units = mask_radius*distance*au/gas.culength/1e2
-        for i in range(nrad):
-            if (gas.rmed[i] < rmask_in_code_units):
-                # *= ( (gas.rmed[i]/rmask_in_code_units)**(10.0) ) CUIDADIN!
-                dustcube[ibin, i, :] = 0.0
-
-    print('Total dust mass [g] = ', np.sum(
-        dustcube[:, :, :]*surface*(gas.culength*1e2)**2.))
-    print('Total dust mass [Mgas] = ', np.sum(
-        dustcube[:, :, :]*surface*(gas.culength*1e2)**2.)/(Mgas*gas.cumass*1e3))
-    print('Total dust mass [Mstar] = ', np.sum(
-        dustcube[:, :, :]*surface*(gas.culength*1e2)**2.)/(gas.cumass*1e3))
-
-    # Total dust surface density
-    dust_surface_density = np.sum(dustcube, axis=0)
-    print(
-        'Maximum dust surface density [in g/cm^2] is ', dust_surface_density.max())
-
-
-# -------------------------
-# b) Case with polarized scattering: we say that the dust is perfectly
-# coupled to the gas. Same procedure whether simulated was carried out with
-# FARGO2D or FARGO3D.
-# -------------------------
-if (RTdust_or_gas == 'dust' and recalc_density == 'Yes' and polarized_scat == 'Yes'):
-
-    dustcube = dust.reshape(nbin, nsec, nrad)
-    print(np.shape(dustcube))
-    # dustcube = np.swapaxes(dustcube,1,2)  # means nbin, nrad, nsec
-    frac = np.zeros(nbin)
-    buf = 0.0
-
-    # compute dust surface density for each size bin
-    for ibin in range(nbin):
-        # fraction of dust mass in current size bin 'ibin', easy to check numerically that sum_frac = 1
-        frac[ibin] = (bins[ibin+1]**(4.0-pindex) - bins[ibin] **
-                      (4.0-pindex)) / (amax**(4.0-pindex) - amin**(4.0-pindex))
-        # total mass of dust particles in current size bin 'ibin'
-        M_i_dust = ratio * Mgas * frac[ibin]
-        buf += M_i_dust
-        print('Dust mass [in units of Mstar] in species ',
-              ibin, ' = ', M_i_dust)
-        # dustcube, which contained N_i(r,phi), now contains sigma_i_dust (r,phi)
-        dustcube[ibin, :, :] = ratio * gas.data * frac[ibin]
-        #
-        if cavity_pol_int == 'Yes':
-            agraincm = 10.0**(0.5*(np.log10(1e2 *
-                              bins[ibin]) + np.log10(1e2*bins[ibin+1])))
-            rhopart = 2.7  # g/cm^3 (small grains)
-            for i in range(nrad):
-                for j in range(nsec):
-                    # local Stokes number at R,phi
-                    st = 0.5*np.pi*agraincm*rhopart / \
-                        (gas.data[i, j]*gas.cumass*1e3/(gas.culength*1e2)**2.)
-                    if st > 1e-4:  # 1e-3 looks like a good threshold
-                        dustcube[ibin, i, j] = 0.0
-
-        # conversion in g/cm^2
-        # dimensions: nbin, nrad, nsec
-        dustcube[ibin, :, :] *= (gas.cumass*1e3)/((gas.culength*1e2)**2.)
-        # decrease dust surface density beyond truncation radius by R^-2
-        # NB: truncation_radius is in arcseconds
-        rcut_in_code_units = truncation_radius*distance*au/gas.culength/1e2
-        rmask_in_code_units = mask_radius*distance*au/gas.culength/1e2
-        for i in range(nrad):
-            if (rcut_in_code_units > 0 and gas.rmed[i] > rcut_in_code_units):
-                dustcube[ibin, i,
-                         :] *= ((gas.rmed[i]/rcut_in_code_units)**(-10.0))
-            if (gas.rmed[i] < rmask_in_code_units):
-                # *= ( (gas.rmed[i]/rmask_in_code_units)**(10.0) ) CUIDADIN!
-                dustcube[ibin, i, :] = 0.0
-
-    print('Total dust mass [g] = ', buf*gas.cumass*1e3)
-
-    # Total dust surface density
-    dust_surface_density = np.sum(dustcube, axis=0)
-    print(
-        'Maximum dust surface density [in g/cm^2] is ', dust_surface_density.max())
-
+else:
+    print("Set of initial conditions not implemented for pluto yet.")
+    print("Use the following: RTdust_or_gas == 'dust' and recalc_density == 'Yes' and polarized_scat == 'No' and fargo3d == 'No'")
+    sys.exit('I must exit!')
 
 # =========================
 # 3. Compute dust mass volume density for each size bin
@@ -2088,35 +1987,19 @@ if RTdust_or_gas == 'dust' and recalc_density == 'Yes':
             # avg stokes number for that bin
             St = avgstokes[ibin]
         for irad in range(nrad):
-            hd[ibin,irad] = (gas.rmed[irad]*np.cos(gas.tmed[:])*gas.data[0,:,irad]).sum(axis=0)/(gas.data[0,:,irad]).sum(axis=0)
-        # gas aspect ratio (gas.rmed[i] = R in code units)
-        #hgas = aspectratio * (gas.rmed)**(flaringindex)
-        # vertical extension depends on grain Stokes number
-        # T = theoretical: hd/hgas = sqrt(alpha/(St+alpha))
-        # T2 = theoretical: hd/hgas = sqrt(Dz/(St+Dz)) with Dz = 10xalpha here is the coefficient for
-        # vertical diffusion at midplane, which can differ from alpha
-        # F = extrapolation from the simulations by Fromang & Nelson 09
-        # G = Gaussian = same as gas (case of well-coupled dust for polarized intensity images)
-        #if z_expansion == 'F':
-        #    hd[ibin, :] = 0.7 * hgas * ((St+1./St)/1000.)**(0.2)
-        #if z_expansion == 'T':
-        #    hd[ibin, :] = hgas * np.sqrt(alphaviscosity/(alphaviscosity+St))
-        #if z_expansion == 'T2':
-        #    hd[ibin, :] = hgas * \
-        #        np.sqrt(10.0*alphaviscosity/(10.0*alphaviscosity+St))
-        #if z_expansion == 'G':
-        #    hd[ibin, :] = hgas
+            hd[ibin,irad] = (gas.rmed[irad]*np.cos(gas.tmed[:])*dustcube[ibin,2,:,irad]).sum(axis=0)/(dustcube[ibin,2,:,irad]).sum(axis=0)
+            print(gas.rmed[irad],hd[ibin,irad])
 
     # dust aspect ratio as function of ibin, r and phi (2D array for each size bin)
-    hd2D = np.zeros((nbin, nsec, ncol, nrad))
+    hd2D = np.zeros((nbin, nsec, nrad))
     for th in range(nsec):
-        hd2D[:, th, :, :] = hd    # nbin, nrad, nsec
+        hd2D[:, th, :] = hd    # nbin, nrad, nsec
 
     # grid radius function of ibin, r and phi (2D array for each size bin)
-    r2D = np.zeros((nbin, nsec, ncol, nrad))
+    r2D = np.zeros((nbin, nsec, nrad))
     for ibin in range(nbin):
         for th in range(nsec):
-            r2D[ibin, th, :, :] = gas.rmed
+            r2D[ibin, th, :] = gas.rmed
 
     # work out exponential and normalization factors exp(-z^2 / 2H_d^2)
     # with z = r cos(theta) and H_d = h_d x R = h_d x r sin(theta)
