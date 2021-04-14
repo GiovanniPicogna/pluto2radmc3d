@@ -146,8 +146,9 @@ class pload(object):
         self.filetype = 'single_file'
         self.endianess = '>'  # not used with AMR, kept for consistency
         self.vars = []
-        for iv in range(len(fh5['Timestep_300/vars'].keys())):
-            self.vars.append(self.keys(fh5['Timestep_300/vars'])[iv])
+        num = str(gas_file)
+        for iv in range(len(fh5['Timestep_'+num+'/vars'].keys())):
+            self.vars.append(self.keys(fh5['Timestep_'+num+'/vars'])[iv])
 
         fh5.close()
 
@@ -312,8 +313,9 @@ class pload(object):
         vars = np.zeros((nx, ny, nz, nvar))
 
         h5vardict = {}
+        num = int(gas_file)
         for iv in range(nvar):
-            h5vardict[myvars[iv]] = self.getVar(fp, 300, myvars[iv])
+            h5vardict[myvars[iv]] = self.getVar(fp, num, myvars[iv])
             #h5vardict[myvars[iv]] = vars[:,:,:,iv].squeeze()
 
         OutDict = dict(NewGridDict)
@@ -496,8 +498,8 @@ class Field(Mesh):
         if len(directory) > 1:
             if directory[-1] != '/':
                 directory += '/'
-
-        D = pload(ns=300, w_dir=directory)
+        ns = int(gas_file)
+        D = pload(ns=ns, w_dir=directory)
 
         nrad = np.shape(D.rho)[2]
         ncol = np.shape(D.rho)[1]
@@ -1842,7 +1844,8 @@ if (RTdust_or_gas == 'dust' and recalc_density == 'Yes' and polarized_scat == 'N
 
     # read information on the dust particles
     #(rad, azi, vr, vt, Stokes, a) = np.loadtxt(dir+'/dustsystat'+str(on)+'.dat', unpack=True)
-    pdata = Particles(ns=9, directory=dir)
+    ns = int(particle_file)
+    pdata = Particles(ns=ns, directory=dir)
     rad = pdata.pos_x
     azi = pdata.pos_y
     vr = pdata.vel_x
