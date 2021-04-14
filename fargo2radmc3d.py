@@ -563,15 +563,6 @@ class Field(Mesh):
         self.x3r = self.pedge
         self.dx3 = self.pedge[1:] - self.pedge[:-1]
 
-    def __open_field(self, f, var, dtype):
-        """
-        Reading the data
-        """
-        datafilename = f+'data.0300.dbl.h5'
-        fp = h5.File(datafilename, 'r')
-        field = self.getVar(fp, 300, var)
-        return field.reshape(self.nrad, self.nsec)  # 2D
-
 # -------------------------------------------------------------------
 # reading particles
 # -------------------------------------------------------------------
@@ -1800,9 +1791,9 @@ R = gas.redge
 T = gas.pedge
 
 # number of grid cells in the radial and azimuthal directions
-nrad = np.shape(gas.data)[2]
-ncol = np.shape(gas.data)[1]
-nsec = np.shape(gas.data)[0]
+nrad = gas.nrad
+ncol = gas.ncol
+nsec = gas.nsec
 
 # extra useful quantities (code units)
 Rinf = gas.redge[0:len(gas.redge)-1]
@@ -1821,8 +1812,7 @@ print('Mgas / Mstar= '+str(Mgas)+' and Mgas [kg] = '+str(Mgas*gas.cumass))
 
 # Allocate arrays
 dust = np.zeros((nsec*ncol*nrad*nbin))
-#bins = np.logspace(np.log10(amin), np.log10(amax), nbin+1)
-bins = np.asarray([0.00005, 0.0005, 0.005, 0.05, 0.2, 0.4, 2, 4, 50, 500, 5000])
+bins = np.asarray([0.00002, 0.0002, 0.002, 0.02, 0.2, 0.4, 2., 4, 20, 200, 2000])
 nparticles = np.zeros(nbin)     # number of particles per bin size
 # average Stokes number of particles per bin size
 avgstokes = np.zeros(nbin)
@@ -1881,17 +1871,36 @@ if (RTdust_or_gas == 'dust' and recalc_density == 'Yes' and polarized_scat == 'N
         k = pdata.pcell_z[m]
         if (k < 0 or k >= nsec+2):
             sys.exit('pb with k = ', k, ' in recalc_density step: I must exit!')
+
         # particle size
         pcsize = a[m]
-
+        #print(pcsize)
         # find out which bin particle belongs to
-        ibin = int(np.log(pcsize/bins.min()) /
-                   np.log(bins.max()/bins.min()) * nbin)
-        if (ibin >= 0 and ibin < nbin):
-            k = ibin*nsec*ncol*nrad + k*ncol*nrad + j*nrad + i
-            dust[k] += 1
-            nparticles[ibin] += 1
-            avgstokes[ibin] += Stokes[m]
+        if(pcsize < 0.0002):
+            ibin = 0
+        elif(pcsize < 0.002):
+            ibin = 1
+        elif(pcsize < 0.02):
+            ibin = 2
+        elif(pcsize < 0.2):
+            ibin = 3
+        elif(pcsize < 0.4):
+            ibin = 4
+        elif(pcsize < 2):
+            ibin = 5
+        elif(pcsize < 4):
+            ibin = 6
+        elif(pcsize < 20):
+            ibin = 7
+        elif(pcsize < 200):
+            ibin = 8
+        else:
+            ibin = 9
+
+        k = ibin*nsec*ncol*nrad + k*ncol*nrad + j*nrad + i
+        dust[k] += 1
+        nparticles[ibin] += 1
+        avgstokes[ibin] += Stokes[m]
 
     for ibin in range(nbin):
         if nparticles[ibin] == 0:
@@ -1902,12 +1911,6 @@ if (RTdust_or_gas == 'dust' and recalc_density == 'Yes' and polarized_scat == 'N
 
     # dustcube currently contains N_i (r,phi), the number of particles per bin size in every grid cell
     dustcube = dust.reshape(nbin, nsec, ncol, nrad)
-    #for ibin in range(nbin):
-    #    for i in range(nrad):
-    #        for j in range(ncol):
-    #            if (dustcube[ibin,2,j,i]>0):
-    #                print(ibin,i,nrad,j,ncol,gas.rmed[i],gas.tmed[j],dustcube[0,2,j,i])
-    # dustcube = np.swapaxes(dustcube,1,2)  # means nbin, nrad, nsec
 
     frac = np.zeros(nbin)
     buf = 0.0
@@ -1987,8 +1990,7 @@ if RTdust_or_gas == 'dust' and recalc_density == 'Yes':
             # avg stokes number for that bin
             St = avgstokes[ibin]
         for irad in range(nrad):
-            hd[ibin,irad] = (gas.rmed[irad]*np.cos(gas.tmed[:])*dustcube[ibin,2,:,irad]).sum(axis=0)/(dustcube[ibin,2,:,irad]).sum(axis=0)
-            print(gas.rmed[irad],hd[ibin,irad])
+            hd[ibin,irad] = hgas[irad]/np.sqrt(1.0 + St/alphaviscosity*(1.0 + 2.0*St)/(1.0 + St))
 
     # dust aspect ratio as function of ibin, r and phi (2D array for each size bin)
     hd2D = np.zeros((nbin, nsec, nrad))
@@ -2004,13 +2006,15 @@ if RTdust_or_gas == 'dust' and recalc_density == 'Yes':
     # work out exponential and normalization factors exp(-z^2 / 2H_d^2)
     # with z = r cos(theta) and H_d = h_d x R = h_d x r sin(theta)
     # r = spherical radius, R = cylindrical radius
-    for j in range(ncol):
+    rhodustcube = dustcube
+    rhodustcube = np.nan_to_num(rhodustcube)
+    #for j in range(ncol):
         # ncol, nbin, nrad, nsec
-        rhodustcube[j, :, :, :] = dustcube * \
-            np.exp(-0.5*(np.cos(gas.tmed[j]) / hd2D)**2.0)
+    #    rhodustcube[j, :, :, :] = dustcube #* \
+            #np.exp(-0.5*(np.cos(gas.tmed[j]) / hd2D)**2.0)
         # quantity is now in g / cm^3
-        rhodustcube[j, :, :, :] /= (np.sqrt(2.*pi)
-                                    * r2D * hd2D * gas.culength*1e2)
+    #    rhodustcube[j, :, :, :] /= (np.sqrt(2.*pi)
+    #                                * r2D * hd2D * gas.culength*1e2)
 
     # for plotting purposes
     axirhodustcube = np.sum(rhodustcube, axis=3)/nsec  # ncol, nbin, nrad
@@ -2018,25 +2022,26 @@ if RTdust_or_gas == 'dust' and recalc_density == 'Yes':
     # Renormalize dust's mass volume density such that the sum over the 3D grid's volume of
     # the dust's mass volume density x the volume of each grid cell does give us the right
     # total dust mass, which equals ratio x Mgas.
-    rhofield = np.sum(rhodustcube, axis=1)  # sum over dust bins
-    print("rhodustcube ", np.shape(rhodustcube),
-          " rhofield", np.shape(rhofield))
-    Aedge, Cedge, Redge = np.meshgrid(
-        gas.pedge, gas.tedge, gas.redge)   # ncol+1, nrad+1, Nsec+1
+    rhofield = np.sum(rhodustcube, axis=0)  # sum over dust bins
+
+    Cedge, Aedge, Redge = np.meshgrid(
+        gas.tedge, gas.pedge, gas.redge)   # ncol+1, nrad+1, Nsec+1
+
     r2 = Redge*Redge
     jacob = r2[:-1, :-1, :-1] * np.sin(Cedge[:-1, :-1, :-1])
-    dphi = Aedge[:-1, :-1, 1:] - Aedge[:-1, :-1, :-1]     # same as 2pi/nsec
-    dr = Redge[:-1, 1:, :-1] - Redge[:-1, :-1, :-1]     # same as Rsup-Rinf
-    dtheta = Cedge[1:, :-1, :-1] - Cedge[:-1, :-1, :-1]
+    dphi = Aedge[1:, :-1, :-1] - Aedge[:-1, :-1, :-1]     # same as 2pi/nsec
+    dr = Redge[:-1, :-1, 1:] - Redge[:-1, :-1, :-1]     # same as Rsup-Rinf
+    dtheta = Cedge[:-1, 1:, :-1] - Cedge[:-1, :-1, :-1]
     # volume of a cell in cm^3
     vol = jacob * dr * dphi * dtheta * \
         ((gas.culength*1e2)**3)       # ncol, nrad, Nsec
-    print(np.shape(jacob), np.shape(vol))
+
     total_mass = np.sum(rhofield*vol)
+
     normalization_factor = ratio * Mgas * (gas.cumass*1e3) / total_mass
     rhodustcube = rhodustcube*normalization_factor
     print('total dust mass after vertical expansion [g] = ', np.sum(np.sum(
-        rhodustcube, axis=1)*vol), ' as normalization factor = ', normalization_factor)
+        rhodustcube, axis=0)*vol), ' as normalization factor = ', normalization_factor)
 
     # write mass volume densities for all size bins
     for ibin in range(nbin):
@@ -2044,12 +2049,12 @@ if RTdust_or_gas == 'dust' and recalc_density == 'Yes':
         for k in range(nsec):
             for j in range(ncol):
                 for i in range(nrad):
-                    DUSTOUT.write(str(rhodustcube[j, ibin, k, i])+' \n')
+                    DUSTOUT.write(str(rhodustcube[ibin, k, j, i])+' \n')
 
     # print max of dust's mass volume density at each colatitude
     for j in range(ncol):
         print('max(rho_dustcube) [g cm-3] for colatitude index j = ',
-              j, ' = ', rhodustcube[j, :, :, :].max())
+              j, ' = ', rhodustcube[:, :, j, :].max())
 
     DUSTOUT.close()
 
