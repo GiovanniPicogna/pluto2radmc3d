@@ -1,3 +1,9 @@
+try:
+    import h5py as h5
+    hasH5 = True
+except ImportError:
+    hasH5 = False
+
 class pload(object):
     # based on A. Mignone routine
     def __init__(self, ns, nsec=600, w_dir=None, datatype=None, level=0, x1range=None, x2range=None, x3range=None):
@@ -69,7 +75,7 @@ class pload(object):
         self.filetype = 'single_file'
         self.endianess = '>'  # not used with AMR, kept for consistency
         self.vars = []
-        num = str(gas_file)
+        num = str(parameters['on'])
         for iv in range(len(fh5['Timestep_'+num+'/vars'].keys())):
             self.vars.append(self.keys(fh5['Timestep_'+num+'/vars'])[iv])
 
