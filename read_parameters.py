@@ -24,6 +24,9 @@ def read_parameters_file(parameters):
     # directory where the pluto output files are
     default = './'
     parameters['dir'] = str(read_parameter('dir',default))
+    if len(parameters['directory']) > 1:
+        if parameters['directory[-1]'] != '/':
+            parameters['directory'] += '/'
 
     # number of the gas output file to read
     default = 0

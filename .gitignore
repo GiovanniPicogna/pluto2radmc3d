@@ -132,3 +132,6 @@ dmypy.json
 # Input parameter
 params.dat
 params_last.dat
+
+# Outputs
+*.inp

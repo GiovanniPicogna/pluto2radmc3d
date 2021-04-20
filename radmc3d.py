@@ -26,23 +26,26 @@ class RTmodel():
 # -------------------------
 # functions calling RADMC3D
 # -------------------------
-def write_radmc3d_script():
+def write_radmc3d_script(parameters):
 
     # RT in the dust continuum
-    if RTdust_or_gas == 'dust':
-        command = 'radmc3d image lambda '+str(wavelength*1e3)+' npix '+str(
-            nbpixels)+' incl '+str(inclination)+' posang '+str(posangle+90.0)+' phi '+str(phiangle)
-        if plot_tau == 'Yes':
-            command = 'radmc3d image tracetau lambda '+str(wavelength*1e3)+' npix '+str(
-                nbpixels)+' incl '+str(inclination)+' posang '+str(posangle+90.0)+' phi '+str(phiangle)
-        if polarized_scat == 'Yes':
+    if parameters['RTdust_or_gas'] == 'dust':
+        command = 'radmc3d image lambda '+str(parameters['wavelength']*1e3)+' npix '+str(
+            parameters['nbpixels'])+' incl '+str(parameters['inclination'])+' posang '+str(
+                parameters['posangle']+90.0)+' phi '+str(parameters['phiangle'])
+        if parameters['plot_tau'] == 'Yes':
+            command = 'radmc3d image tracetau lambda '+str(parameters['wavelength']*1e3)+' npix '+str(
+                parameters['nbpixels'])+' incl '+str(parameters['inclination'])+' posang '+str(
+                    parameters['posangle']+90.0)+' phi '+str(parameters['phiangle'])
+        if parameters['polarized_scat'] == 'Yes':
             command = command+' stokes'
 
     # RT in gas lines
-    if RTdust_or_gas == 'gas':
-        if widthkms == 0.0:
-            command = 'radmc3d image iline '+str(iline)+' vkms '+str(vkms)+' npix '+str(
-                nbpixels)+' incl '+str(inclination)+' posang '+str(posangle+90.0)+' phi '+str(phiangle)
+    if parameters['RTdust_or_gas'] == 'gas':
+        if parameters['widthkms'] == 0.0:
+            command = 'radmc3d image iline '+str(parameters['iline'])+' vkms '+str(parameters['vkms'])+' npix '+str(
+                parameters['nbpixels'])+' incl '+str(parameters['inclination'])+' posang '+str(
+                    parameters['posangle']+90.0)+' phi '+str(parameters['phiangle'])
         else:
             command = 'radmc3d image iline '+str(iline)+' widthkms '+str(widthkms)+' linenlam '+str(linenlam)+' npix '+str(
                 nbpixels)+' incl '+str(inclination)+' posang '+str(posangle+90.0)+' phi '+str(phiangle)
@@ -52,13 +55,13 @@ def write_radmc3d_script():
                 #command='radmc3d tausurf 1.0 iline '+str(iline)+' widthkms '+str(widthkms)+' linenlam '+str(linenlam)+' npix '+str(nbpixels)+' incl '+str(inclination)+' posang '+str(posangle+90.0)+' phi '+str(phiangle)
 
     # optional: second-order ray tracing
-    if secondorder == 'Yes':
+    if parameters['secondorder'] == 'Yes':
         command = command+' secondorder'
 
     # write execution script
     print(command)
     SCRIPT = open('script_radmc', 'w')
-    if Tdust_eq_Thydro == 'No':
+    if parameters['Tdust_eq_Thydro'] == 'No':
         SCRIPT.write('radmc3d mctherm; '+command)
     else:
         SCRIPT.write(command)
@@ -69,34 +72,34 @@ def write_radmc3d_script():
 # -------------------------
 # Convert result of RADMC3D calculation into fits file
 # -------------------------
-def exportfits(M):
+def exportfits(M,parameters):
     # name of .fits file where data is output
     # Note that M.label will disentangle dust and gas line calculations
-    if plot_tau == 'No':
-        if brightness_temp == 'Yes':
+    if parameters['plot_tau'] == 'No':
+        if parameters['brightness_temp'] == 'Yes':
             image = 'imageTb_'
         else:
             image = 'image_'
-        if RTdust_or_gas == 'gas':
+        if parameters['RTdust_or_gas'] == 'gas':
             # no need for lambda in file's name for gas RT calculations...
-            outfile = image+str(M.label)+'_i'+str(inclination) + \
-                '_phi'+str(M.phi)+'_PA'+str(posangle)
-        if RTdust_or_gas == 'dust':
-            outfile = image+str(M.label)+'_lbda'+str(wavelength)+'_i' + \
-                str(inclination)+'_phi'+str(M.phi)+'_PA'+str(posangle)
+            outfile = image+str(M.label)+'_i'+str(parameters['inclination']) + \
+                '_phi'+str(M.phi)+'_PA'+str(parameters['posangle'])
+        if parameters['RTdust_or_gas'] == 'dust':
+            outfile = image+str(M.label)+'_lbda'+str(parameters['wavelength'])+'_i' + \
+                str(parameters['inclination'])+'_phi'+str(M.phi)+'_PA'+str(parameters['posangle'])
     else:
-        if RTdust_or_gas == 'gas':
+        if parameters['RTdust_or_gas'] == 'gas':
             # no need for lambda in file's name for gas RT calculations...
-            outfile = 'tau_'+str(M.label)+'_i'+str(inclination) + \
-                '_phi'+str(M.phi)+'_PA'+str(posangle)
-        if RTdust_or_gas == 'dust':
-            outfile = 'tau_'+str(M.label)+'_lbda'+str(wavelength)+'_i' + \
-                str(inclination)+'_phi'+str(M.phi)+'_PA'+str(posangle)
-    if secondorder == 'Yes':
+            outfile = 'tau_'+str(M.label)+'_i'+str(parameters['inclination']) + \
+                '_phi'+str(M.phi)+'_PA'+str(parameters['posangle'])
+        if parameters['RTdust_or_gas'] == 'dust':
+            outfile = 'tau_'+str(M.label)+'_lbda'+str(parameters['wavelength'])+'_i' + \
+                str(parameters['inclination'])+'_phi'+str(M.phi)+'_PA'+str(parameters['posangle'])
+    if parameters['secondorder'] == 'Yes':
         outfile = outfile+'_so'
 
-    if add_noise == 'Yes':
-        outfileall = outfile+'_wn'+str(noise_dev_std)+'_all.fits'
+    if parameters['add_noise'] == 'Yes':
+        outfileall = outfile+'_wn'+str(parameters['noise_dev_std'])+'_all.fits'
     else:
         outfileall = outfile+'_all.fits'
     outfile = outfile+'.fits'
@@ -127,10 +130,10 @@ def exportfits(M):
         print('range of velocities = ', vel_range)
         dv = vel_range[1]-vel_range[0]
     else:
-        if RTdust_or_gas == 'gas':
+        if parameters['RTdust_or_gas'] == 'gas':
             lbda0 = lbda[0]
         else:
-            lbda0 = wavelength*1e3  # in microns
+            lbda0 = parameters['wavelength']*1e3  # in microns
     f.readline()               # empty line
 
     # calculate physical scales
@@ -148,27 +151,27 @@ def exportfits(M):
 
     # beam area in pixel^2
     mycdelt = pixsize_x/(M.distance/pc)/au
-    beam = (np.pi/(4.*np.log(2.)))*bmaj*bmin/(mycdelt**2.)
+    beam = (np.pi/(4.*np.log(2.)))*parameters['bmaj']*parameters['bmin']/(mycdelt**2.)
     print('beam = ', beam)
     # stdev lengths in pixel
-    stdev_x = (bmaj/(2.*np.sqrt(2.*np.log(2.)))) / mycdelt
-    stdev_y = (bmin/(2.*np.sqrt(2.*np.log(2.)))) / mycdelt
+    stdev_x = (parameters['bmaj']/(2.*np.sqrt(2.*np.log(2.)))) / mycdelt
+    stdev_y = (parameters['bmin']/(2.*np.sqrt(2.*np.log(2.)))) / mycdelt
 
     # ---------------
     # load image data
     # ---------------
-    if polarized_scat == 'No':
-        if nlam == 1:  # dust continuum RT calculations (implicitly)
+    if parameters['polarized_scat'] == 'No':
+        if parameters['nlam'] == 1:  # dust continuum RT calculations (implicitly)
             images = np.loadtxt(infile, skiprows=6)
             im = images.reshape(im_ny, im_nx)
             naxis = 2
-        if nlam > 1:   # gas RT calculations (implicitly)
-            intensity_in_each_channel = np.zeros((nlam, im_ny, im_nx))
+        if parameters['nlam'] > 1:   # gas RT calculations (implicitly)
+            intensity_in_each_channel = np.zeros((parameters['nlam'], im_ny, im_nx))
             moment0 = np.zeros((im_ny, im_nx))
             moment1 = np.zeros((im_ny, im_nx))
             naxis = 2
             images = np.loadtxt(infile, skiprows=5+nlam)
-            for i in range(nlam):
+            for i in range(parameters['nlam']):
                 im_v = images[i*im_ny*im_nx:(i+1)*im_ny*im_nx]
                 im = im_v.reshape(im_ny, im_nx)
                 # sometimes the intensity has a value at the origin
@@ -178,10 +181,10 @@ def exportfits(M):
                 # origin, as it should be in our disc model!
                 im[im_ny//2, im_nx//2] = 0.0
                 # ---
-                if (add_noise == 'Yes'):
+                if (parameters['add_noise'] == 'Yes'):
                     # noise standard deviation in Jy per pixel
                     noise_dev_std_Jy_per_pixel = (
-                        noise_dev_std/fluxfactor) / np.sqrt(0.5*beam)  # 1D
+                        parameters['noise_dev_std']/fluxfactor) / np.sqrt(0.5*beam)  # 1D
                     if i == 0:
                         print('noise_dev_std_Jy_per_pixel = ',
                               noise_dev_std_Jy_per_pixel)
@@ -192,7 +195,7 @@ def exportfits(M):
                     im += noise_array
                 # ---
                 # keep track of beam-convolved specific intensity in each channel map
-                if plot_tau == 'No':
+                if parameters['plot_tau'] == 'No':
                     # avoid division by zeros w/o noise...
                     smooth = Gauss_filter(
                         im, stdev_x, stdev_y, bpaangle, Plot=False) + 1e-20
@@ -201,9 +204,9 @@ def exportfits(M):
                     # in this case im contains the optical depth (non convolved)
                     intensity_in_each_channel[i, :, :] = im
                 # ---
-                if moment_order == 0:
+                if parameters['moment_order'] == 0:
                     moment0 += im*dv  # non convolved (done afterwards)
-                if moment_order == 1:
+                if parameters['moment_order'] == 1:
                     moment0 += smooth*dv
                     '''
                     # apply 3-sigma clipping to smooth array if noise
@@ -215,16 +218,16 @@ def exportfits(M):
                                     smooth[k,l] = 0.0
                     '''
                     moment1 += smooth*vel_range[i]*dv
-                if moment_order > 1:
+                if parameters['moment_order'] > 1:
                     sys.exit(
                         'moment map of order > 1 not implemented yet, I must exit!')
             # end loop over wavelengths
-            if moment_order == 0:
+            if parameters['moment_order'] == 0:
                 im = moment0   # non-convolved quantity
-            if moment_order == 1:
+            if parameters['moment_order'] == 1:
                 # ratio of two beam-convolved quantities (convolution not redone afterwards)
                 im = moment1/moment0
-                if add_noise == 'Yes':
+                if parameters['add_noise'] == 'Yes':
                     '''
                     buf = moment0*fluxfactor*beam   # moment 0 in Jy/beam
                     print('min(buf) = ',buf.min())
@@ -236,7 +239,7 @@ def exportfits(M):
                                 im[k,l] = float("NaN")#0.0
                     '''
 
-    if RTdust_or_gas == 'dust' and polarized_scat == 'Yes':
+    if parameters['RTdust_or_gas'] == 'dust' and parameters['polarized_scat'] == 'Yes':
         naxis = 3
         images = np.zeros((5*im_ny*im_nx))
         im = images.reshape(5, im_ny, im_nx)
@@ -288,12 +291,12 @@ def exportfits(M):
     LOG.write('pixsize '+str(pixsize_x_deg*3600.)+"\n")
 
     # conversion of the intensity from erg/s/cm^2/Hz/steradian to Jy/pix
-    if plot_tau == 'No' and moment_order != 1:
+    if parameters['plot_tau'] == 'No' and parameters['moment_order'] != 1:
         im = im*fluxfactor
 
     hdu.data = im.astype('float32')
 
-    if plot_tau == 'No':
+    if parameters['plot_tau'] == 'No':
         print("Total flux [Jy] = "+str(np.sum(hdu.data)))
         LOG.write('flux '+str(np.sum(hdu.data))+"\n")
     LOG.close()
@@ -301,7 +304,7 @@ def exportfits(M):
     hdu.writeto(outfile, output_verify='fix', overwrite=True)
 
     # save entire intensity channels in another fits file
-    if polarized_scat == 'No' and nlam > 1:
+    if parameters['polarized_scat'] == 'No' and parameters['nlam'] > 1:
         hdu2 = fits.PrimaryHDU()
         hdu2.header['BITPIX'] = -32
         hdu2.header['NAXIS'] = 3  # naxis
@@ -402,19 +405,19 @@ def write_lines(specie, lines_mode):
     lines.close()
 
     # Get molecular data file
-    molecular_file = 'molecule_'+str(gasspecies)+'.inp'
+    molecular_file = 'molecule_'+str(specie)+'.inp'
     if os.path.isfile(molecular_file) == False:
         print('--------- Downloading molecular data file ----------')
-        datafile = str(gasspecies)
-        if gasspecies == 'hco+':
+        datafile = str(specie)
+        if specie == 'hco+':
             datafile = 'hco+@xpol'
-        if gasspecies == 'so':
+        if specie == 'so':
             datafile = 'so@lique'
-        if gasspecies == 'cs':
+        if specie == 'cs':
             datafile = 'cs@lique'
         command = 'curl -O https://home.strw.leidenuniv.nl/~moldata/datafiles/'+datafile+'.dat'
         os.system(command)
-        command = 'mv '+datafile+'.dat molecule_'+str(gasspecies)+'.inp'
+        command = 'mv '+datafile+'.dat molecule_'+str(specie)+'.inp'
         os.system(command)
 
 # -----------------------

@@ -1,7 +1,7 @@
 # -------------------------------------------------------------------
 # writing dustopac
 # -------------------------------------------------------------------
-def write_dustopac(species=['ac_opct', 'Draine_Si'], nbin=20):
+def write_dustopac(species=['ac_opct', 'Draine_Si'], scat_mode=10, nbin=20):
     print('writing dustopac.inp')
     hline = "-----------------------------------------------------------------------------\n"
     OPACOUT = open('dustopac.inp', 'w')

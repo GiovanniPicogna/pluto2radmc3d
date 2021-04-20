@@ -12,18 +12,15 @@
 # ===================================================================
 
 # -----------------------------
-# Requires librairies
+# Required librairies
 # -----------------------------
 import numpy as np
 import matplotlib
 import matplotlib.pyplot as plt
-import pylab
-import math
-import copy
+import math 
 import sys
 import os
 import array
-import subprocess
 from astropy.io import fits
 import matplotlib
 import re
@@ -34,15 +31,17 @@ from scipy import ndimage
 import scipy.interpolate
 from copy import deepcopy
 from astropy.wcs import WCS
-import scipy as sp
 from scipy.ndimage import map_coordinates
 from pylab import *
 import matplotlib.colors as colors
 from makedustopac import *
 from matplotlib.mlab import *
 import struct
-import read_parameters
-import field
+from read_parameters import *
+from field import *
+from particles import *
+from opacities import *
+from radmc3d import *
 try:
     import h5py as h5
     hasH5 = True
@@ -52,25 +51,17 @@ except ImportError:
 def main():
 
     parameters = dict()
-    read_parameters.read_parameters_file(parameters)
-    read_parameters.check_parameters_consistency(parameters)
-    read_parameters.print_parameters(parameters)
+    read_parameters_file(parameters)
+    check_parameters_consistency(parameters)
+    print_parameters(parameters)
 
     # gas surface density field:
-    gas = field.Field(field='rho', parameters=parameters, directory=parameters['dir'])
-
-    # 2D computational grid: R = grid cylindrical radius in code units, T = grid azimuth in radians
-    R = gas.redge
-    T = gas.pedge
+    gas = Field(field='rho', parameters=parameters, directory=parameters['dir'])
 
     # number of grid cells in the radial and azimuthal directions
     nrad = gas.nrad
     ncol = gas.ncol
     nsec = gas.nsec
-
-    # extra useful quantities (code units)
-    Rinf = gas.redge[0:len(gas.redge)-1]
-    Rsup = gas.redge[1:len(gas.redge)]
 
     # volume of each grid cell (code units)
     volume = np.zeros((nsec,ncol,nrad))
@@ -84,6 +75,7 @@ def main():
     print('Mgas / Mstar= '+str(Mgas)+' and Mgas [kg] = '+str(Mgas*gas.cumass))
 
     # Allocate arrays
+    nbin = parameters['nbin']
     dust = np.zeros((nsec*ncol*nrad*nbin))
     bins = np.asarray([0.00002, 0.0002, 0.002, 0.02, 0.2, 0.4, 2., 4, 20, 200, 2000])
     nparticles = np.zeros(nbin)     # number of particles per bin size
@@ -92,51 +84,28 @@ def main():
 
     # Color map
     mycolormap = 'nipy_spectral'
-    if moment_order == 1:
+    if parameters['moment_order'] == 1:
         mycolormap = 'RdBu_r'
-
-    '''
-    # check out memory available on your architecture
-    mem_gib = float(psutil.virtual_memory().total/1024**3)
-    mem_array_gib = nrad*nsec*ncol*nbin*8.0/(1024.**3)
-    if (mem_array_gib/mem_gib > 0.5):
-        print('!!!!!!!!!!!!!!!!!!!!!!!!!!!')
-        print('Beware that the memory requested for allocating the dust mass volume density or the temperature arrays')
-        print('is very close to the amount of memory available on your architecture...')
-        print('!!!!!!!!!!!!!!!!!!!!!!!!!!!')
-    '''
 
     # =========================
     # 2. compute dust surface density for each size bin
     # =========================
     print('--------- computing dust surface density ----------')
 
-    if (RTdust_or_gas == 'dust' and recalc_density == 'Yes' and polarized_scat == 'No' and fargo3d == 'No'):
+    if (parameters['RTdust_or_gas'] == 'dust' and parameters['recalc_density'] == 'Yes' and parameters['polarized_scat'] == 'No'):
 
         # read information on the dust particles
-        #(rad, azi, vr, vt, Stokes, a) = np.loadtxt(dir+'/dustsystat'+str(on)+'.dat', unpack=True)
-        ns = int(particle_file)
-        pdata = Particles(ns=ns, directory=dir)
-        rad = pdata.pos_x
-        azi = pdata.pos_y
-        vr = pdata.vel_x
-        vt = pdata.vel_y
-        Stokes = pdata.tstop
-        a = pdata.radius
+        pdata = Particles(ns=parameters['particle_file'], directory=parameters['dir'])
 
         # Populate dust bins
-        for m in range(len(rad)):   # sum over dust particles
-            r = rad[m]
-            t = azi[m]
+        for m in range(pdata.NOP):   # sum over dust particles
             # radial index of the cell where the particle is
-            i = int(np.log(r/gas.redge.min())/np.log(gas.redge.max()/gas.redge.min()) * nrad)
+            i = int(np.log(pdata.pos_x[m]/gas.redge.min())/np.log(gas.redge.max()/gas.redge.min()) * nrad)
             if (i < 0 or i >= nrad+2):
                 sys.exit('pb with i = ', i, ' in recalc_density step: I must exit!')
 
             # polar index of the cell where the particles is
-            j = ncol - 1 - int(np.log((np.pi-t)/(np.pi-gas.tedge.max()))/np.log((np.pi-gas.tedge.min())/(np.pi-gas.tedge.max())) * ncol)
-            #print(j,gas.tmed[j],t)
-            #print(gas.tmed[j],pdata.pos_y[m])
+            j = ncol - 1 - int(np.log((np.pi-pdata.pos_y[m])/(np.pi-gas.tedge.max()))/np.log((np.pi-gas.tedge.min())/(np.pi-gas.tedge.max())) * ncol)
             if (j < 0 or j >= ncol+2):
                 sys.exit('pb with j = ', j, ' in recalc_density step: I must exit!')
     
@@ -146,36 +115,20 @@ def main():
             if (k < 0 or k >= nsec+2):
                 sys.exit('pb with k = ', k, ' in recalc_density step: I must exit!')
 
-            # particle size
-            pcsize = a[m]
-            #print(pcsize)
             # find out which bin particle belongs to
-            if(pcsize < 0.0002):
-                ibin = 0
-            elif(pcsize < 0.002):
-                ibin = 1
-            elif(pcsize < 0.02):
-                ibin = 2
-            elif(pcsize < 0.2):
-                ibin = 3
-            elif(pcsize < 0.4):
-                ibin = 4
-            elif(pcsize < 2):
-                ibin = 5
-            elif(pcsize < 4):
-                ibin = 6
-            elif(pcsize < 20):
-                ibin = 7
-            elif(pcsize < 200):
-                ibin = 8
-            else:
-                ibin = 9
-
-            if(ibin < 3):
-                k = ibin*nsec*ncol*nrad + k*ncol*nrad + j*nrad + i
-                dust[k] += 1
-                nparticles[ibin] += 1
-                avgstokes[ibin] += Stokes[m]
+            for bin in range(nbin):
+                if(pdata.radius[m] < bins[bin+1]):
+                    ibin = bin
+                    break
+            
+            # skip particles that are bigger than the selected bin sizes
+            if(pdata.radius[m] >= bins[nbin+1]):
+                continue
+            
+            k = ibin*nsec*ncol*nrad + k*ncol*nrad + j*nrad + i
+            dust[k] += 1
+            nparticles[ibin] += 1
+            avgstokes[ibin] += pdata.tstop[m]
 
         for ibin in range(nbin):
             if nparticles[ibin] == 0:
@@ -192,10 +145,10 @@ def main():
         # finally compute dust surface density for each size bin
         for ibin in range(nbin):
             # fraction of dust mass in current size bin 'ibin', easy to check numerically that sum_frac = 1
-            frac[ibin] = (bins[ibin+1]**(4.0-pindex) - bins[ibin] **
-                        (4.0-pindex)) / (amax**(4.0-pindex) - amin**(4.0-pindex))
+            frac[ibin] = (pow(bins[ibin+1],(4.0-parameters['pindex'])) - pow(bins[ibin],(4.0-parameters['pindex']))) / \
+                (pow(parameters['amax'],(4.0-parameters['pindex'])) - pow(parameters['amin'],(4.0-parameters['pindex'])))
             # total mass of dust particles in current size bin 'ibin'
-            M_i_dust = ratio * Mgas * frac[ibin]
+            M_i_dust = parameters['ratio'] * Mgas * frac[ibin]
             buf += M_i_dust
             print('Dust mass [in units of Mstar] in species ',
                 ibin, ' = ', M_i_dust)
@@ -206,7 +159,7 @@ def main():
             dustcube[ibin, :, :, :] *= (gas.cumass*1e3)/((gas.culength*1e2)**2.)
 
         # Overwrite first bin (ibin = 0) to model extra bin with small dust tightly coupled to the gas
-        if bin_small_dust == 'Yes':
+        if parameters['bin_small_dust'] == 'Yes':
             frac[0] *= 5e3
             print("!!!!!!!!!!!!!!!!!!!!!!!!!!!")
             print("Bin with index 0 changed to include arbitrarilly small dust tightly coupled to the gas")
@@ -216,7 +169,7 @@ def main():
             imin = np.argmin(np.abs(gas.rmed-1.4))
             # radial index corresponding to 0.6"
             imax = np.argmin(np.abs(gas.rmed-2.8))
-            dustcube[0, imin:imax, :] = gas.data[imin:imax, :] * ratio * frac[0] * \
+            dustcube[0, imin:imax, :] = gas.data[imin:imax, :] * parameters['ratio'] * frac[0] * \
                 (gas.cumass*1e3)/((gas.culength*1e2)
                                 ** 2.)  # dimensions: nbin, nrad, nsec
 
@@ -234,14 +187,14 @@ def main():
 
     else:
         print("Set of initial conditions not implemented for pluto yet.")
-        print("Use the following: RTdust_or_gas == 'dust' and recalc_density == 'Yes' and polarized_scat == 'No' and fargo3d == 'No'")
+        print("Use the following: RTdust_or_gas == 'dust' and recalc_density == 'Yes' and polarized_scat == 'No'")
         sys.exit('I must exit!')
 
     # =========================
     # 3. Compute dust mass volume density for each size bin
     #    (vertical expansion assuming hydrostatic equilibrium)
     # =========================
-    if RTdust_or_gas == 'dust' and recalc_density == 'Yes':
+    if parameters['RTdust_or_gas'] == 'dust' and parameters['recalc_density'] == 'Yes':
         print('--------- computing dust mass volume density ----------')
 
         DUSTOUT = open('dust_density.inp', 'w')
@@ -261,35 +214,17 @@ def main():
             hgas[irad] = (gas.rmed[irad]*np.cos(gas.tmed[:])*gas.data[0,:,irad]).sum(axis=0)/(gas.data[0,:,irad]).sum(axis=0)
 
         for ibin in range(nbin):
-            if polarized_scat == 'No':
+            if parameters['polarized_scat'] == 'No':
                 # avg stokes number for that bin
                 St = avgstokes[ibin]
             for irad in range(nrad):
-                hd[ibin,irad] = hgas[irad]/np.sqrt(1.0 + St/alphaviscosity*(1.0 + 2.0*St)/(1.0 + St))
-
-        # dust aspect ratio as function of ibin, r and phi (2D array for each size bin)
-        hd2D = np.zeros((nbin, nsec, nrad))
-        for th in range(nsec):
-            hd2D[:, th, :] = hd    # nbin, nrad, nsec
-
-        # grid radius function of ibin, r and phi (2D array for each size bin)
-        r2D = np.zeros((nbin, nsec, nrad))
-        for ibin in range(nbin):
-            for th in range(nsec):
-                r2D[ibin, th, :] = gas.rmed
+                hd[ibin,irad] = hgas[irad]/np.sqrt(1.0 + St/parameters['alphaviscosity']*(1.0 + 2.0*St)/(1.0 + St))
 
         # work out exponential and normalization factors exp(-z^2 / 2H_d^2)
         # with z = r cos(theta) and H_d = h_d x R = h_d x r sin(theta)
         # r = spherical radius, R = cylindrical radius
         rhodustcube = dustcube
         rhodustcube = np.nan_to_num(rhodustcube)
-        #for j in range(ncol):
-            # ncol, nbin, nrad, nsec
-        #    rhodustcube[j, :, :, :] = dustcube #* \
-                #np.exp(-0.5*(np.cos(gas.tmed[j]) / hd2D)**2.0)
-            # quantity is now in g / cm^3
-        #    rhodustcube[j, :, :, :] /= (np.sqrt(2.*pi)
-        #                                * r2D * hd2D * gas.culength*1e2)
 
         # for plotting purposes
         axirhodustcube = np.sum(rhodustcube, axis=3)/nsec  # ncol, nbin, nrad
@@ -313,7 +248,7 @@ def main():
 
         total_mass = np.sum(rhofield*vol)
 
-        normalization_factor = ratio * Mgas * (gas.cumass*1e3) / total_mass
+        normalization_factor = parameters['ratio'] * Mgas * (gas.cumass*1e3) / total_mass
         rhodustcube = rhodustcube*normalization_factor
         print('total dust mass after vertical expansion [g] = ', np.sum(np.sum(
             rhodustcube, axis=0)*vol), ' as normalization factor = ', normalization_factor)
@@ -334,17 +269,15 @@ def main():
         DUSTOUT.close()
 
         # free RAM memory
-        del rhodustcube, dustcube, dust, hd2D, r2D
-
+        del rhodustcube, dustcube, dust
 
     else:
         print('--------- I did not compute dust densities (recalc_density = No in params.dat file) ----------')
 
-
     # =========================
     # 4. Compute dust opacities
     # =========================
-    if RTdust_or_gas == 'dust' and recalc_opac == 'Yes':
+    if parameters['RTdust_or_gas'] == 'dust' and parameters['recalc_opac'] == 'Yes':
         print('--------- computing dust opacities ----------')
 
         # Calculation of opacities uses the python scripts makedustopac.py and bhmie.py
@@ -358,17 +291,17 @@ def main():
         verbose = False         # If True, then write out status information
         ntheta = 181           # Number of scattering angle sampling points
         # link to optical constants file
-        optconstfile = os.path.expanduser(opacity_dir)+'/'+species+'.lnk'
+        optconstfile = os.path.expanduser(parameters['opacity_dir'])+'/'+parameters['species']+'.lnk'
 
         # The material density in gram / cm^3
         graindens = 2.0  # default density in g / cc
-        if (species == 'mix_2species_porous' or species == 'mix_2species_porous_ice' or species == 'mix_2species_porous_ice70'):
+        if (parameters['species'] == 'mix_2species_porous' or parameters['species'] == 'mix_2species_porous_ice' or parameters['species'] == 'mix_2species_porous_ice70'):
             graindens = 0.1  # g / cc
-        if (species == 'mix_2species' or species == 'mix_2species_60silicates_40ice'):
+        if (parameters['species'] == 'mix_2species' or parameters['species'] == 'mix_2species_60silicates_40ice'):
             graindens = 1.7  # g / cc
-        if species == 'mix_2species_ice70':
+        if parameters['species'] == 'mix_2species_ice70':
             graindens = 1.26  # g / cc
-        if species == 'mix_2species_60silicates_40carbons':
+        if parameters['species'] == 'mix_2species_60silicates_40carbons':
             graindens = 2.7  # g / cc
 
         # Set up a wavelength grid (in cm) upon which we want to compute the opacities
@@ -380,21 +313,19 @@ def main():
 
         for ibin in range(int(nbin)):
             # median grain size in cm in current bin size:
-            if fargo3d == 'No':
-                agraincm = 10.0**(0.5*(np.log10(1e2 *
-                                bins[ibin]) + np.log10(1e2*bins[ibin+1])))
-            else:
-                agraincm = 1e2*dust_size[ibin]
+            agraincm = 10.0**(0.5*(np.log10(1e2 *
+                            bins[ibin]) + np.log10(1e2*bins[ibin+1])))
+
             print('====================')
             print('bin ', ibin+1, '/', nbin)
             print('grain size [cm]: ', agraincm,
                 ' with grain density [g/cc] = ', graindens)
             print('====================')
-            pathout = species+str(ibin)
+            pathout = parameters['species']+str(ibin)
             opac = compute_opac_mie(optconstfile, graindens, agraincm, lamcm, theta=theta,
                                     extrapolate=extrapol, logawidth=logawidth, na=na,
                                     chopforward=chop, verbose=verbose)
-            if (scat_mode >= 3):
+            if (parameters['scat_mode'] >= 3):
                 print("Writing dust opacities in dustkapscatmat* files")
                 write_radmc3d_scatmat_file(opac, pathout)
             else:
@@ -404,29 +335,29 @@ def main():
         print('------- taking dustkap* opacity files in current directory (recalc_opac = No in params.dat file) ------ ')
 
     # Write dustopac.inp file even if we don't (re)calculate dust opacities
-    if RTdust_or_gas == 'dust':
-        write_dustopac(species, nbin)
-        if plot_opac == 'Yes':
+    if parameters['RTdust_or_gas'] == 'dust':
+        write_dustopac(species=parameters['species'], scat_mode=parameters['scat_mode'], nbin=parameters['nbin'], )
+        if parameters['plot_opac'] == 'Yes':
             print('--------- plotting dust opacities ----------')
-            plot_opacities(species=species, amin=amin, amax=amax,
-                        nbin=nbin, lbda1=wavelength*1e3)
+            plot_opacities(species=parameters['species'], amin=parameters['amin'], amax=parameters['amax'],
+                        nbin=parameters['nbin'], lbda1=parameters['wavelength']*1e3)
 
     # write radmc3d script, particularly useful in case radmc3d mctherm /
     # ray_tracing are run on a different platform
-    write_radmc3d_script()
+    write_radmc3d_script(parameters)
 
 
     # =======================================
     # 5. Compute gas density and temperature (RT in gas lines)
     # =======================================
-    if RTdust_or_gas == 'gas' and recalc_density == 'Yes':
+    if parameters['RTdust_or_gas'] == 'gas' and parameters['recalc_density'] == 'Yes':
         print('--------- computing gas mass volume density ----------')
 
         # nrad, nsec, quantity is in g / cm^2
         gascube = gas.data*(gas.cumass*1e3)/((gas.culength*1e2)**2.)
 
         # Artificially make a cavity devoid of gas (test)
-        if cavity_gas == 'Yes':
+        if parameters['cavity_gas'] == 'Yes':
             imin = np.argmin(np.abs(gas.rmed-0.9))
             axi_cav_gas = 0.0
             for j in range(nsec):
@@ -438,11 +369,11 @@ def main():
                         gascube[i, j] = axi_cav_gas * \
                             (gas.rmed[i]/gas.rmed[imin])**(2.0)
 
-        GASOUT = open('numberdens_%s.inp' % gasspecies, 'w')
+        GASOUT = open('numberdens_%s.inp' % parameters['gasspecies'], 'w')
         GASOUT.write('1 \n')                           # iformat
         GASOUT.write(str(nrad*nsec*ncol)+' \n')        # n cells
 
-        if lines_mode > 1:
+        if parameters['lines_mode'] > 1:
             GASOUTH2 = open('numberdens_h2.inp', 'w')
             GASOUTH2.write('1 \n')                           # iformat
             GASOUTH2.write(str(nrad*nsec*ncol)+' \n')        # n cells
@@ -455,7 +386,7 @@ def main():
 
         # gas aspect ratio as function of r (or actually, R, cylindrical radius)
         # gas aspect ratio (gas.rmed[i] = R in code units)
-        hgas = aspectratio * (gas.rmed)**(flaringindex)
+        hgas = parameters['aspectratio'] * (gas.rmed)**(flaringindex)
 
         # Set dust / gas temperature if Tdust_eq_Thydro == 'Yes' (currently default case)
         if Tdust_eq_Thydro == 'Yes':
@@ -465,7 +396,7 @@ def main():
             TEMPOUT.write(str(nrad*nsec*ncol)+' \n')        # n cells
             gas_temp = np.zeros((ncol, nrad, nsec))
             gas_temp_cyl = np.zeros((gas.nver, nrad, nsec))
-            thydro = aspectratio*aspectratio*gas.cutemp * \
+            thydro = parameters['aspectratio']*parameters['aspectratio']*gas.cutemp * \
                 gas.rmed**(-1.0+2.0*flaringindex)
             for k in range(nsec):
                 for j in range(gas.nver):
@@ -521,7 +452,7 @@ def main():
         # Simple model for photodissociation: drop
         # number density by 5 orders of magnitude if 1/2
         # erfc(z/sqrt(2)H) x Sigma_gas / mu m_p < 1e21 cm^-2
-        if (photodissociation == 'Yes' or freezeout == 'Yes'):
+        if (parameters['photodissociation'] == 'Yes' or parameters['freezeout'] == 'Yes'):
             for k in range(nsec):
                 for j in range(gas.nver):
                     for i in range(nrad):
@@ -532,10 +463,10 @@ def main():
                         chim = 0.5 * \
                             math.erfc(-gas.zmed[j]/np.sqrt(2.0)/hgas[i] /
                                     gas.rmed[i]) * gascube[i, k] / (2.3*mp)
-                        if (photodissociation == 'Yes' and (chip < 1e21 or chim < 1e21)):
+                        if (parameters['photodissociation'] == 'Yes' and (chip < 1e21 or chim < 1e21)):
                             rhogascube_cyl[j, i, k] *= 1e-5
                     # Simple modelling of freezeout: drop CO abundance
-                        if freezeout == 'Yes' and gas_temp_cyl[j, i, k] < 19.0:
+                        if parameters['freezeout'] == 'Yes' and gas_temp_cyl[j, i, k] < 19.0:
                             rhogascube_cyl[j, i, k] *= 1e-5
 
         # then, sweep through the spherical grid
@@ -564,14 +495,14 @@ def main():
             for j in range(ncol):
                 for i in range(nrad):
                     GASOUT.write(str(rhogascube[j, i, k])+' \n')
-                    if lines_mode > 1:
+                    if parameters['lines_mode'] > 1:
                         GASOUTH2.write(str(rhogascubeh2[j, i, k])+' \n')
         GASOUT.close()
-        if lines_mode > 1:
+        if parameters['lines_mode'] > 1:
             GASOUTH2.close()
 
         # plot azimuthally-averaged density vs. radius and colatitude
-        if plot_density == 'Yes':
+        if parameters['plot_density'] == 'Yes':
             from mpl_toolkits.axes_grid1 import make_axes_locatable
             import matplotlib.ticker as ticker
             from matplotlib.ticker import (
@@ -613,22 +544,22 @@ def main():
             cax.xaxis.set_major_locator(ticker.LogLocator(base=10.0, numticks=10))
             # title on top
             cax.xaxis.set_label_position('top')
-            if gasspecies == 'co':
+            if parameters['gasspecies'] == 'co':
                 strgas = r'$^{12}$CO'
-            elif gasspecies == '13co':
+            elif parameters['gasspecies'] == '13co':
                 strgas = r'$^{13}$CO'
-            elif gasspecies == 'c17o':
+            elif parameters['gasspecies'] == 'c17o':
                 strgas = r'C$^{17}$O'
-            elif gasspecies == 'c18o':
+            elif parameters['gasspecies'] == 'c18o':
                 strgas = r'C$^{18}$O'
             else:
-                strgas = gasspecies
+                strgas = parameters['gasspecies']
             cax.set_xlabel(strgas+' abundance '+r'[cm$^{-3}$]')
             cax.xaxis.labelpad = 8
             fileout = 'density.pdf'
             plt.savefig('./'+fileout, dpi=160)
             # plot h2 number density if non-LTE transfer
-            if lines_mode > 1:
+            if parameters['lines_mode'] > 1:
                 fig = plt.figure(figsize=(8., 8.))
                 plt.subplots_adjust(left=0.12, right=0.94, top=0.88, bottom=0.11)
                 ax = plt.gca()
@@ -685,65 +616,22 @@ def main():
         MTURB.close()
 
         # gas velocity field
-        if fargo3d == 'Yes':
-            vtheta3D = Field(field='gasvz'+str(on)+'.dat',
-                            directory=dir).data  # code units
-            vtheta3D *= (gas.culength*1e2)/(gas.cutime)  # cm/s
-            vrad3D = Field(field='gasvy'+str(on)+'.dat',
+        vtheta3D = Field(field='gasvz'+str(on)+'.dat',
                         directory=dir).data  # code units
-            vrad3D *= (gas.culength*1e2)/(gas.cutime)  # cm/s
-            vphi3D = Field(field='gasvx'+str(on)+'.dat',
-                        directory=dir).data  # code units
-            f1, xpla, ypla, f4, f5, f6, f7, f8, date, omega = np.loadtxt(
-                dir+"/planet0.dat", unpack=True)
-            omegaframe = omega[on]
-            print('OMEGAFRAME = ', omegaframe)
-            for theta in range(ncol):
-                for phi in range(nsec):
-                    vphi3D[theta, :, phi] += gas.rmed*omegaframe
-            vphi3D *= (gas.culength*1e2)/(gas.cutime)  # cm/s
-        else:
-            vrad3D_cyl = np.zeros((gas.nver, nrad, nsec))   # zeros!
-            vphi3D_cyl = np.zeros((gas.nver, nrad, nsec))   # zeros!
-            vtheta3D = np.zeros((ncol, nrad, nsec))   # zeros!
-            vrad3D = np.zeros((ncol, nrad, nsec))   # zeros!
-            vphi3D = np.zeros((ncol, nrad, nsec))   # zeros!
-            vrad2D = Field(field='gasvrad'+str(on)+'.dat',
-                        directory=dir).data  # code units
-            vrad2D *= (gas.culength*1e2)/(gas.cutime)  # cm/s
-            vphi2D = Field(field='gasvtheta'+str(on)+'.dat',
-                        directory=dir).data  # code units
-            f1, xpla, ypla, f4, f5, f6, f7, date, omega, f10, f11 = np.loadtxt(
-                dir+"/planet0.dat", unpack=True)
-            omegaframe = omega[on]
-            print('OMEGAFRAME = ', omegaframe)
+        vtheta3D *= (gas.culength*1e2)/(gas.cutime)  # cm/s
+        vrad3D = Field(field='gasvy'+str(on)+'.dat',
+                    directory=dir).data  # code units
+        vrad3D *= (gas.culength*1e2)/(gas.cutime)  # cm/s
+        vphi3D = Field(field='gasvx'+str(on)+'.dat',
+                    directory=dir).data  # code units
+        f1, xpla, ypla, f4, f5, f6, f7, f8, date, omega = np.loadtxt(
+            dir+"/planet0.dat", unpack=True)
+        omegaframe = omega[on]
+        print('OMEGAFRAME = ', omegaframe)
+        for theta in range(ncol):
             for phi in range(nsec):
-                vphi2D[:, phi] += gas.rmed*omegaframe
-            vphi2D *= (gas.culength*1e2)/(gas.cutime)  # cm/s
-            # Vertical expansion for vrad and vphi (vtheta being assumed zero)
-            for z in range(gas.nver):
-                vrad3D_cyl[z, :, :] = vrad2D
-                vphi3D_cyl[z, :, :] = vphi2D
-            # Now, sweep through the spherical grid
-            for j in range(ncol):
-                for i in range(nrad):
-                    R = gas.rmed[i]*np.sin(gas.tmed[j])  # cylindrical radius
-                    z = gas.rmed[i]*np.cos(gas.tmed[j])  # vertical altitude
-                    icyl = np.argmin(np.abs(gas.rmed-R))
-                    if R < gas.rmed[icyl] and icyl > 0:
-                        icyl -= 1
-                    jcyl = np.argmin(np.abs(gas.zmed-z))
-                    if z < gas.zmed[jcyl] and jcyl > 0:
-                        jcyl -= 1
-                    if (icyl < nrad-1 and jcyl < gas.nver-1):
-                        vrad3D[j, i, :] = (vrad3D_cyl[jcyl, icyl, :]*(gas.rmed[icyl+1]-R)*(gas.zmed[jcyl+1]-z) + vrad3D_cyl[jcyl+1, icyl, :]*(gas.rmed[icyl+1]-R)*(z-gas.zmed[jcyl]) + vrad3D_cyl[jcyl, icyl+1, :]*(
-                            R-gas.rmed[icyl])*(gas.zmed[jcyl+1]-z) + vrad3D_cyl[jcyl+1, icyl+1, :]*(R-gas.rmed[icyl])*(z-gas.zmed[jcyl])) / ((gas.rmed[icyl+1]-gas.rmed[icyl]) * (gas.zmed[jcyl+1]-gas.zmed[jcyl]))
-                        vphi3D[j, i, :] = (vphi3D_cyl[jcyl, icyl, :]*(gas.rmed[icyl+1]-R)*(gas.zmed[jcyl+1]-z) + vphi3D_cyl[jcyl+1, icyl, :]*(gas.rmed[icyl+1]-R)*(z-gas.zmed[jcyl]) + vphi3D_cyl[jcyl, icyl+1, :]*(
-                            R-gas.rmed[icyl])*(gas.zmed[jcyl+1]-z) + vphi3D_cyl[jcyl+1, icyl+1, :]*(R-gas.rmed[icyl])*(z-gas.zmed[jcyl])) / ((gas.rmed[icyl+1]-gas.rmed[icyl]) * (gas.zmed[jcyl+1]-gas.zmed[jcyl]))
-                    else:
-                        # simple nearest-grid point interpolation...
-                        vrad3D[j, i, :] = vrad3D_cyl[jcyl, icyl, :]
-                        vphi3D[j, i, :] = vphi3D_cyl[jcyl, icyl, :]
+                vphi3D[theta, :, phi] += gas.rmed*omegaframe
+        vphi3D *= (gas.culength*1e2)/(gas.cutime)  # cm/s
 
         GASVEL = open('gas_velocity.inp', 'w')
         GASVEL.write('1 \n')                           # iformat
@@ -766,26 +654,28 @@ def main():
         print('--------- printing auxiliary files ----------')
 
         # need to check why we need to output wavelength...
-        if recalc_rawfits == 'No':
+        if parameters['recalc_rawfits'] == 'No':
             write_wavelength()
             write_stars(Rstar=rstar, Tstar=teff)
             # Write 3D spherical grid for RT computational calculation
             write_AMRgrid(gas, Plot=False)
-            if RTdust_or_gas == 'gas':
-                write_lines(str(gasspecies), lines_mode)
+            if parameters['RTdust_or_gas'] == 'gas':
+                write_lines(parameters['gasspecies'], parameters['lines_mode'])
             # rto_style = 3 means that RADMC3D will write binary output files
             # setthreads corresponds to the number of threads (cores) over which radmc3d runs
-            write_radmc3dinp(incl_dust=incl_dust, incl_lines=incl_lines, lines_mode=lines_mode, nphot_scat=nb_photons_scat, nphot=nb_photons,
-                            rto_style=3, tgas_eq_tdust=tgas_eq_tdust, modified_random_walk=1, scattering_mode_max=scat_mode, setthreads=nbcores)
+            write_radmc3dinp(incl_dust=parameters['incl_dust'], incl_lines=parameters['incl_lines'], lines_mode=parameters['lines_mode'], nphot_scat=parameters['nb_photons_scat'], 
+                            nphot=parameters['nb_photons'], rto_style=3, tgas_eq_tdust=parameters['tgas_eq_tdust'], modified_random_walk=1, scattering_mode_max=parameters['scat_mode'],
+                            setthreads=parameters['nbcores'])
 
         # Add 90 degrees to position angle so that RADMC3D's definition of
         # position angle be consistent with observed position
         # angle, which is what we enter in the params.dat file
-        M = RTmodel(distance=distance, Lambda=wavelength*1e3, label=label, line=gasspecies, iline=iline,
-                    vkms=vkms, widthkms=widthkms, npix=nbpixels, phi=phiangle, incl=inclination, posang=posangle+90.0)
+        M = RTmodel(distance=parameters['distance'], Lambda=parameters['wavelength']*1e3, label=label, line=parameters['gasspecies'], iline=parameters['iline'],
+                    vkms=parameters['vkms'], widthkms=parameters['widthkms'], npix=parameters['nbpixels'], phi=parameters['phiangle'], incl=parameters['inclination'], 
+                    posang=parameters['posangle']+90.0)
 
         # Set dust / gas temperature if Tdust_eq_Thydro == 'Yes'
-        if recalc_rawfits == 'No' and Tdust_eq_Thydro == 'Yes' and RTdust_or_gas == 'dust' and recalc_temperature == 'Yes':
+        if parameters['recalc_rawfits'] == 'No' and parameters['Tdust_eq_Thydro'] == 'Yes' and parameters['RTdust_or_gas'] == 'dust' and parameters['recalc_temperature'] == 'Yes':
             print('--------- Writing temperature file (no mctherm) ----------')
             os.system('rm -f dust_temperature.bdat')        # avoid confusion!...
             TEMPOUT = open('dust_temperature.dat', 'w')
@@ -794,7 +684,7 @@ def main():
             TEMPOUT.write(str(int(nbin))+' \n')             # nbin size bins
 
             gas_temp = np.zeros((ncol, nrad, nsec))
-            thydro = aspectratio*aspectratio*gas.cutemp * \
+            thydro = parameters['aspectratio']*parameters['aspectratio']*gas.cutemp * \
                 gas.rmed**(-1.0+2.0*flaringindex)
             for k in range(nsec):
                 for j in range(ncol):
@@ -810,20 +700,20 @@ def main():
                             TEMPOUT.write(str(gas_temp[j, i, k])+' \n')
             TEMPOUT.close()
             del gas_temp
-            if RTdust_or_gas == 'gas' and Tdust_eq_Thydro == 'Yes':
+            if parameters['RTdust_or_gas'] == 'gas' and parameters['Tdust_eq_Thydro'] == 'Yes':
                 del gas_temp_cyl
 
         # Now run RADMC3D
-        if recalc_rawfits == 'No':
+        if parameters['recalc_rawfits'] == 'No':
             print('--------- Now executing RADMC3D ----------')
             os.system('./script_radmc')
 
         print('--------- exporting results in fits format ----------')
-        outfile = exportfits(M)
+        outfile = exportfits(M,parameters)
 
-        if plot_temperature == 'Yes':
+        if parameters['plot_temperature'] == 'Yes':
             # Plot midplane and surface temperature profiles
-            if RTdust_or_gas == 'dust':
+            if parameters['RTdust_or_gas'] == 'dust':
                 Temp = np.fromfile('dust_temperature.bdat', dtype='float64')
                 Temp = Temp[4:]
                 Temp = Temp.reshape(nbin, nsec, ncol, nrad)
@@ -847,7 +737,7 @@ def main():
             S = gas.rmed*gas.culength/1.5e11  # radius in a.u.
             # gas temperature in hydro simulation in Kelvin (assuming T in R^-1/2, no matter
             # the value of the gas flaring index in the simulation)
-            Tm_model = aspectratio*aspectratio * \
+            Tm_model = parameters['aspectratio']*parameters['aspectratio'] * \
                 gas.cutemp*gas.rmed**(-1.0+2.0*flaringindex)
             ax.plot(S, axiTm, 'bo', markersize=1., label='midplane')
             ax.plot(S, Tm_model, 'b--', markersize=1., label='midplane hydro')
@@ -882,11 +772,11 @@ def main():
         print('------- I did not run RADMC3D, using existing .fits file for convolution ')
         print('------- (recalc_radmc = No in params.dat file) and final image ------ ')
 
-        if RTdust_or_gas == 'gas':
+        if parameters['RTdust_or_gas'] == 'gas':
             # no need for lambda in file's name for gas RT calculations...
             outfile = 'image_'+str(label)+'_i'+str(inclination) + \
                 '_phi'+str(phiangle)+'_PA'+str(posangle)
-        if RTdust_or_gas == 'dust':
+        if parameters['RTdust_or_gas'] == 'dust':
             outfile = 'image_'+str(label)+'_lbda'+str(wavelength)+'_i' + \
                 str(inclination)+'_phi'+str(phiangle)+'_PA'+str(posangle)
 
@@ -912,7 +802,7 @@ def main():
         outfile = os.path.splitext(outfile)[0]
 
         # add moment order information if gas
-        if RTdust_or_gas == 'gas' and widthkms > 0.0:
+        if parameters['RTdust_or_gas'] == 'gas' and widthkms > 0.0:
             outfile = outfile + '_moment'+str(moment_order)
         # add bmaj information
         outfile = outfile + '_bmaj'+str(bmaj)
@@ -927,20 +817,20 @@ def main():
         lbda0 = hdr['LBDAMIC']*1e-3
 
         # a) case with no polarized scattering: fits file directly contains raw intensity field
-        if polarized_scat == 'No':
+        if parameters['polarized_scat'] == 'No':
             nx = hdr['NAXIS1']
             ny = hdr['NAXIS2']
             raw_intensity = f[0].data
-            if (recalc_radmc == 'No' and plot_tau == 'No'):
+            if (parameters['recalc_radmc'] == 'No' and parameters['plot_tau'] == 'No'):
                 # sum over pixels
                 print("Total flux [Jy] = "+str(np.sum(raw_intensity)))
             # check beam is correctly handled by inserting a source point at the
             # origin of the raw intensity image
-            if check_beam == 'Yes':
+            if parameters['check_beam'] == 'Yes':
                 raw_intensity[:, :] = 0.0
                 raw_intensity[nx//2-1, ny//2-1] = 1.0
             # Add white (Gaussian) noise to raw flux image to simulate effects of 'thermal' noise
-            if (add_noise == 'Yes' and RTdust_or_gas == 'dust' and plot_tau == 'No'):
+            if (parameters['add_noise'] == 'Yes' and parameters['RTdust_or_gas'] == 'dust' and parameters['plot_tau'] == 'No'):
                 # beam area in pixel^2
                 beam = (np.pi/(4.*np.log(2.)))*bmaj*bmin/(cdelt**2.)
                 # noise standard deviation in Jy per pixel (I've checked the expression below works well)
@@ -951,7 +841,7 @@ def main():
                     0.0, noise_dev_std_Jy_per_pixel, size=nbpixels*nbpixels)
                 noise_array = noise_array.reshape(nbpixels, nbpixels)
                 raw_intensity += noise_array
-            if brightness_temp == 'Yes':
+            if parameters['brightness_temp'] == 'Yes':
                 # beware that all units are in cgs! We need to convert
                 # 'intensity' from Jy/pixel to cgs units!
                 # pixel size in each direction in cm
@@ -967,7 +857,7 @@ def main():
                 #raw_intensity = np.nan_to_num(raw_intensity)
 
         # b) case with polarized scattering: fits file contains raw Stokes vectors
-        if RTdust_or_gas == 'dust' and polarized_scat == 'Yes':
+        if parameters['RTdust_or_gas'] == 'dust' and parameters['polarized_scat'] == 'Yes':
             cube = f[0].data
             Q = cube[1, :, :]
             U = cube[2, :, :]
@@ -982,7 +872,7 @@ def main():
             Y0 = ny/2-1
             rrs = np.sqrt((XXs-X0)**2+(YYs-Y0)**2)
             theta = np.arctan2(-(XXs-X0), (YYs-Y0))  # notice atan(x/y)
-            if add_noise == 'Yes':
+            if parameters['add_noise'] == 'Yes':
                 # add noise to Q and U Stokes arrays
                 # noise array
                 noise_array_Q = np.random.normal(
@@ -994,9 +884,9 @@ def main():
                 noise_array_U = noise_array_U.reshape(nbpixels, nbpixels)
                 U += noise_array_U
             # add mask in polarized intensity Qphi image if mask_radius != 0
-            if mask_radius != 0.0:
+            if parameters['mask_radius'] != 0.0:
                 pillbox = np.ones((nx, ny))
-                imaskrad = mask_radius/cdelt  # since cdelt is pixel size in arcseconds
+                imaskrad = parameters['mask_radius']/cdelt  # since cdelt is pixel size in arcseconds
                 pillbox[np.where(rrs < imaskrad)] = 0.
 
         # ------------
@@ -1009,9 +899,9 @@ def main():
         stdev_y = (bmin/(2.*np.sqrt(2.*np.log(2.)))) / cdelt
 
         # a) case with no polarized scattering
-        if (polarized_scat == 'No' and plot_tau == 'No'):
+        if (parameters['polarized_scat'] == 'No' and parameters['plot_tau'] == 'No'):
             # Call to Gauss_filter function
-            if moment_order != 1:
+            if parameters['moment_order'] != 1:
                 smooth = Gauss_filter(raw_intensity, stdev_x,
                                     stdev_y, bpaangle, Plot=False)
             else:
@@ -1019,58 +909,58 @@ def main():
 
             # convert image from Jy/pixel to mJy/beam or microJy/beam
             # could be refined...
-            if brightness_temp == 'Yes':
+            if parameters['brightness_temp'] == 'Yes':
                 convolved_intensity = smooth
-            if brightness_temp == 'No':
+            if parameters['brightness_temp'] == 'No':
                 convolved_intensity = smooth * 1e3 * beam   # mJy/beam
 
             strflux = 'Flux of continuum emission (mJy/beam)'
-            if gasspecies == 'co':
+            if parameters['gasspecies'] == 'co':
                 strgas = r'$^{12}$CO'
-            elif gasspecies == '13co':
+            elif parameters['gasspecies'] == '13co':
                 strgas = r'$^{13}$CO'
-            elif gasspecies == 'c17o':
+            elif parameters['gasspecies'] == 'c17o':
                 strgas = r'C$^{17}$O'
-            elif gasspecies == 'c18o':
+            elif parameters['gasspecies'] == 'c18o':
                 strgas = r'C$^{18}$O'
-            elif gasspecies == 'hco+':
+            elif parameters['gasspecies'] == 'hco+':
                 strgas = r'HCO+'
-            elif gasspecies == 'so':
+            elif parameters['gasspecies'] == 'so':
                 strgas = r'SO'
             else:
-                strgas = gasspecies
-            if gasspecies != 'so':
+                strgas = parameters['gasspecies']
+            if parameters['gasspecies'] != 'so':
                 strgas += r' ($%d \rightarrow %d$)' % (iline, iline-1)
-            if gasspecies == 'so' and iline == 14:
+            if parameters['gasspecies'] == 'so' and iline == 14:
                 strgas += r' ($5_6 \rightarrow 4_5$)'
 
-            if brightness_temp == 'Yes':
+            if parameters['brightness_temp'] == 'Yes':
                 # Gas RT and a single velocity channel
-                if RTdust_or_gas == 'gas' and widthkms == 0.0:
+                if parameters['RTdust_or_gas'] == 'gas' and parameters['widthkms'] == 0.0:
                     strflux = strgas+' brightness temperature (K)'
                 # Gas RT and mooment order 0 map
-                if RTdust_or_gas == 'gas' and moment_order == 0 and widthkms != 0.0:
+                if parameters['RTdust_or_gas'] == 'gas' and parameters['moment_order'] == 0 and parameters['widthkms'] != 0.0:
                     strflux = strgas+' integrated brightness temperature (K km/s)'
-                if RTdust_or_gas == 'dust':
+                if parameters['RTdust_or_gas'] == 'dust':
                     strflux = r'Brightness temperature (K)'
             else:
                 # Gas RT and a single velocity channel
-                if RTdust_or_gas == 'gas' and widthkms == 0.0:
+                if parameters['RTdust_or_gas'] == 'gas' and parameters['widthkms'] == 0.0:
                     strflux = strgas+' intensity (mJy/beam)'
                 # Gas RT and mooment order 0 map
-                if RTdust_or_gas == 'gas' and moment_order == 0 and widthkms != 0.0:
+                if parameters['RTdust_or_gas'] == 'gas' and parameters['moment_order'] == 0 and parameters['widthkms'] != 0.0:
                     strflux = strgas+' integrated intensity (mJy/beam km/s)'
                 if convolved_intensity.max() < 1.0:
                     convolved_intensity = smooth * 1e6 * beam   # microJy/beam
                     strflux = r'Flux of continuum emission ($\mu$Jy/beam)'
                     # Gas RT and a single velocity channel
-                    if RTdust_or_gas == 'gas' and widthkms == 0.0:
+                    if parameters['RTdust_or_gas'] == 'gas' and parameters['widthkms'] == 0.0:
                         strflux = strgas+' intensity ($\mu$Jy/beam)'
-                    if RTdust_or_gas == 'gas' and moment_order == 0 and widthkms != 0.0:
+                    if parameters['RTdust_or_gas'] == 'gas' and parameters['moment_order'] == 0 and parameters['widthkms'] != 0.0:
                         strflux = strgas + \
                             ' integrated intensity ($\mu$Jy/beam km/s)'
             #
-            if RTdust_or_gas == 'gas' and moment_order == 1:
+            if parameters['RTdust_or_gas'] == 'gas' and parameters['moment_order'] == 1:
                 convolved_intensity = smooth
                 # this is actually 'raw_intensity' since for moment 1 maps
                 # the intensity in each channel map is already convolved,
@@ -1078,15 +968,15 @@ def main():
                 strflux = strgas+' velocity (km/s)'
 
         #
-        if plot_tau == 'Yes':
+        if parameters['plot_tau'] == 'Yes':
             convolved_intensity = raw_intensity
             strflux = r'Absorption optical depth $\tau'
 
         # b) case with polarized scattering
-        if RTdust_or_gas == 'dust' and polarized_scat == 'Yes':
+        if parameters['RTdust_or_gas'] == 'dust' and parameters['polarized_scat'] == 'Yes':
             Q_smooth = Gauss_filter(Q, stdev_x, stdev_y, bpaangle, Plot=False)
             U_smooth = Gauss_filter(U, stdev_x, stdev_y, bpaangle, Plot=False)
-            if mask_radius != 0.0:
+            if parameters['mask_radius'] != 0.0:
                 pillbox_smooth = Gauss_filter(
                     pillbox, stdev_x, stdev_y, bpaangle, Plot=False)
                 Q_smooth *= pillbox_smooth
@@ -1145,7 +1035,7 @@ def main():
         # if polarised imaging, first de-project Qphi image to multiply by R^2
         # then re-project back
         # ----------------------------
-        if RTdust_or_gas == 'dust' and polarized_scat == 'Yes':
+        if parameters['RTdust_or_gas'] == 'dust' and parameters['polarized_scat'] == 'Yes':
             hdu0 = fits.open(jybeamfileout)
             hdr0 = hdu0[0].header
             nx = int(hdr0['NAXIS1'])
@@ -1208,7 +1098,7 @@ def main():
 
             # save final fits
             inbasename = os.path.basename('./'+outfile)
-            if add_noise == 'Yes':
+            if parameters['add_noise'] == 'Yes':
                 substr = '_wn'+str(noise_dev_std)+'_JyBeam.fits'
                 jybeamfileout = re.sub('.fits', substr, inbasename)
             else:
@@ -1244,8 +1134,8 @@ def main():
         d0 = -cdelt*(nx//2.-dpix)  # <0
         d1 = cdelt*(nx//2.+dpix)   # >0
         # da positive definite
-        if (minmaxaxis < abs(a0)):
-            da = minmaxaxis
+        if (parameters['minmaxaxis'] < abs(a0)):
+            da = parameters['minmaxaxis']
         else:
             da = maximum(abs(a0), abs(a1))
         mina = da
@@ -1269,10 +1159,10 @@ def main():
         # interpolation='none'
         min = convolved_intensity.min()
         max = convolved_intensity.max()
-        if RTdust_or_gas == 'dust' and polarized_scat == 'Yes':
+        if parameters['RTdust_or_gas'] == 'dust' and parameters['polarized_scat'] == 'Yes':
             min = 0.0
             max = 1.0  # cuidadin 1.0
-        if RTdust_or_gas == 'gas' and moment_order == 1:
+        if parameters['RTdust_or_gas'] == 'gas' and parameters['moment_order'] == 1:
             min = -6.0
             max = 6.0
         CM = ax.imshow(convolved_intensity, origin='lower', cmap=mycolormap,
@@ -1298,12 +1188,12 @@ def main():
         '''
 
         # Add a few contours in order 1 moment maps for gas emission
-        if RTdust_or_gas == 'gas' and moment_order == 1:
+        if parameters['RTdust_or_gas'] == 'gas' and parameters['moment_order'] == 1:
             ax.contour(convolved_intensity, levels=10, color='black',
                     linestyles='-', origin='lower', extent=[a0, a1, d0, d1])
 
         # plot beam
-        if plot_tau == 'No':
+        if parameters['plot_tau'] == 'No':
             from matplotlib.patches import Ellipse
             e = Ellipse(xy=[xlambda, dmin+0.166*da], width=bmin,
                         height=bmaj, angle=bpaangle+90.0)
@@ -1311,16 +1201,6 @@ def main():
             e.set_facecolor('white')
             e.set_alpha(1.0)
             ax.add_artist(e)
-        # plot beam
-        '''
-        if check_beam == 'Yes':
-            from matplotlib.patches import Ellipse
-            e = Ellipse(xy=[0.0,0.0], width=bmin, height=bmaj, angle=bpaangle+90.0)
-            e.set_clip_box(ax.bbox)
-            e.set_facecolor('white')
-            e.set_alpha(1.0)
-            ax.add_artist(e)
-        '''
 
         # plot color-bar
         from mpl_toolkits.axes_grid1 import make_axes_locatable
@@ -1341,7 +1221,7 @@ def main():
         # =====================
         # Compute deprojection and polar expansion (SP)
         # =====================
-        if deproj_polar == 'Yes':
+        if parameters['deproj_polar'] == 'Yes':
             currentdir = os.getcwd()
             alpha_min = 0.          # deg, PA of offset from the star
             Delta_min = 0.          # arcsec, amplitude of offset from the star
@@ -1375,7 +1255,7 @@ def main():
 
             # azimuthal shift such that PA=0 corresponds to y-axis pointing upwards, and
             # increases counter-clockwise from that axis
-            if xaxisflip == 'Yes':
+            if parameters['xaxisflip'] == 'Yes':
                 jshift = int(nbpixels/2)
             else:
                 jshift = int(nbpixels/2)
@@ -1392,8 +1272,8 @@ def main():
 
             # Set x- and y-ranges
             ax.set_xlim(-180, 180)          # PA relative to Clump 1's
-            if (minmaxaxis < maximum(abs(a0), abs(a1))):
-                ymax = minmaxaxis
+            if (parameters['minmaxaxis'] < maximum(abs(a0), abs(a1))):
+                ymax = parameters['minmaxaxis']
             else:
                 ymax = maximum(abs(a0), abs(a1))
             ax.set_ylim(0, ymax)      # Deprojected radius in arcsec
@@ -1415,10 +1295,10 @@ def main():
             # interpolation='none'
             min = convolved_intensity.min()  # not exactly same as 0
             max = convolved_intensity.max()
-            if RTdust_or_gas == 'dust' and polarized_scat == 'Yes':
+            if parameters['RTdust_or_gas'] == 'dust' and parameters['polarized_scat'] == 'Yes':
                 min = 0.0
                 max = 1.0  # cuidadin 1.0
-            if RTdust_or_gas == 'gas' and moment_order == 1:
+            if parameters['RTdust_or_gas'] == 'gas' and parameters['moment_order'] == 1:
                 min = -6.0
                 max = 6.0
             CM = ax.imshow(convolved_intensity, origin='lower', cmap=mycolormap, interpolation='bilinear', extent=[
@@ -1448,21 +1328,18 @@ def main():
             plt.savefig('./'+fileout, dpi=160)
             plt.clf()
 
-            if axi_intensity == 'Yes':
+            if parameters['axi_intensity'] == 'Yes':
                 average_convolved_intensity = np.zeros(nbpixels)
                 for j in range(nbpixels):
                     for i in range(nbpixels):
                         average_convolved_intensity[j] += convolved_intensity[j][i]/nbpixels
 
-                # rkarr = np.linspace(0,minmaxaxis*distance,nbpixels)
-                # rkarr = np.linspace(2,40,nbpixels)
-                # rkarr = gas.rmed*gas.culength/1.5e11  # radius in a.u.
                 # radius in arcseconds
                 rkarr = np.linspace(
                     0, gas.rmed[-1]*gas.culength/1.5e11/distance, nbpixels)
 
                 nb_noise = 0
-                if add_noise == 'Yes':
+                if parameters['add_noise'] == 'Yes':
                     nb_noise = 1
 
                 file = open('axiconv%d.dat' % (nb_noise), 'w')
@@ -1495,16 +1372,13 @@ def main():
     # =========================
     # 8. Compute 2D analytical solution to RT equation w/o scattering
     # =========================
-    if calc_abs_map == 'Yes':
+    if parameters['calc_abs_map'] == 'Yes':
         print('--------- Computing 2D analytical solution to RT equation w/o scattering ----------')
 
         # ---------------------------
         # a) assume dust surface density != gas surface density (default case)
         # ---------------------------
-        # -  -  -  -  -  -  -  -  -  -  -  -  -  -
-        # CASE 1: FARGO2D simulation (Lagrangian particles)
-        # -  -  -  -  -  -  -  -  -  -  -  -  -  -
-        if dustdens_eq_gasdens == 'No' and fargo3d == 'No':
+        if parameters['dustdens_eq_gasdens'] == 'No':
             # read information on the dust particles
             (rad, azi, vr, vt, Stokes, a) = np.loadtxt(
                 dir+'/dustsystat'+str(on)+'.dat', unpack=True)
@@ -1562,10 +1436,10 @@ def main():
             # finally compute dust surface density for each size bin
             for ibin in range(nbin):
                 # fraction of dust mass in current size bin 'ibin', easy to check numerically that sum_frac = 1
-                frac[ibin] = (bins[ibin+1]**(4.0-pindex) - bins[ibin] **
-                            (4.0-pindex)) / (amax**(4.0-pindex) - amin**(4.0-pindex))
+                frac[ibin] = (bins[ibin+1]**(4.0-parameters['pindex']) - bins[ibin] **
+                            (4.0-parameters['pindex'])) / (parameters['amax']**(4.0-parameters['pindex']) - parameters['amin']**(4.0-parameters['pindex']))
                 # total mass of dust particles in current size bin 'ibin'
-                M_i_dust = ratio * Mgas * frac[ibin]
+                M_i_dust = parameters['ratio'] * Mgas * frac[ibin]
                 # dustcube, which contained N_i(r,phi), now contains sigma_i_dust (r,phi)
                 dustcube[ibin, :, :] *= M_i_dust / surface / nparticles[ibin]
                 # conversion in g/cm^2
@@ -1573,7 +1447,7 @@ def main():
                 dustcube[ibin, :, :] *= (gas.cumass*1e3)/((gas.culength*1e2)**2.)
 
             # Overwrite first bin (ibin = 0) to model extra bin with small dust tightly coupled to the gas
-            if bin_small_dust == 'Yes':
+            if parameters['bin_small_dust'] == 'Yes':
                 frac[0] *= 5e3
                 print("!!!!!!!!!!!!!!!!!!!!!!!!!!!")
                 print(
@@ -1584,63 +1458,23 @@ def main():
                 imin = np.argmin(np.abs(gas.rmed-1.2))
                 # radial index corresponding to 0.6"
                 imax = np.argmin(np.abs(gas.rmed-3.0))
-                dustcube[0, imin:imax, :] = gas.data[imin:imax, :] * ratio * frac[0] * \
+                dustcube[0, imin:imax, :] = gas.data[imin:imax, :] * parameters['ratio'] * frac[0] * \
                     (gas.cumass*1e3)/((gas.culength*1e2)
                                     ** 2.)  # dimensions: nbin, nrad, nsec
-
-        # -  -  -  -  -  -  -  -  -  -  -  -  -  -
-        # CASE 2: FARGO3D simulation (dust fluids)
-        # -  -  -  -  -  -  -  -  -  -  -  -  -  -
-        if dustdens_eq_gasdens == 'No' and fargo3d == 'Yes':
-            dust = np.zeros((nsec*nrad*nbin))
-            dustcube = dust.reshape(nbin, nsec, nrad)
-            dustcube = np.swapaxes(dustcube, 1, 2)  # means nbin, nrad, nsec
-
-            for ibin in range(len(dust_id)):
-
-                fileread = 'dust'+str(int(dust_id[ibin]))+'dens'+str(on)+'.dat'
-                #print('ibin = ', ibin, ', read file = ',fileread)
-
-                # directly read dust surface density for each dust fluid in code units
-                dustcube[ibin, :, :] = Field(field=fileread, directory=dir).data
-
-                # conversion in g/cm^2
-                # dimensions: nbin, nrad, nsec
-                dustcube[ibin, :, :] *= (gas.cumass*1e3)/((gas.culength*1e2)**2.)
-
-                # decrease dust surface density inside mask radius
-                # NB: mask_radius is in arcseconds
-                rmask_in_code_units = mask_radius*distance*au/gas.culength/1e2
-                for i in range(nrad):
-                    if (gas.rmed[i] < rmask_in_code_units):
-                        # *= ( (gas.rmed[i]/rmask_in_code_units)**(10.0) ) CUIDADIN!
-                        dustcube[ibin, i, :] = 0.0
-
-            print('Total dust mass [g] = ', np.sum(
-                dustcube[:, :, :]*surface*(gas.culength*1e2)**2.))
-            print('Total dust mass [Mgas] = ', np.sum(
-                dustcube[:, :, :]*surface*(gas.culength*1e2)**2.)/(Mgas*gas.cumass*1e3))
-            print('Total dust mass [Mstar] = ', np.sum(
-                dustcube[:, :, :]*surface*(gas.culength*1e2)**2.)/(gas.cumass*1e3))
-
-            # Total dust surface density
-            dust_surface_density = np.sum(dustcube, axis=0)
-            print(
-                'Maximum dust surface density [in g/cm^2] is ', dust_surface_density.max())
 
         # ---------------------------
         # b) assume dust surface density = gas surface density
         # ---------------------------
-        if dustdens_eq_gasdens == 'Yes':
+        if parameters['dustdens_eq_gasdens'] == 'Yes':
             dust = np.zeros((nsec*nrad*nbin))
             # dustcube currently contains N_i (r,phi), the number of particles per bin size in every grid cell
             dustcube = dust.reshape(nbin, nsec, nrad)
             dustcube = np.swapaxes(dustcube, 1, 2)  # means nbin, nrad, nsec
             frac = np.zeros(nbin)
             for ibin in range(nbin):
-                frac[ibin] = (bins[ibin+1]**(4.0-pindex) - bins[ibin] **
-                            (4.0-pindex)) / (amax**(4.0-pindex) - amin**(4.0-pindex))
-                dustcube[ibin, :, :] = gas.data * ratio * frac[ibin] * \
+                frac[ibin] = (bins[ibin+1]**(4.0-parameters['pindex']) - bins[ibin] **
+                            (4.0-parameters['pindex'])) / (parameters['amax']**(4.0-parameters['pindex']) - parameters['amin']**(4.0-parameters['pindex']))
+                dustcube[ibin, :, :] = gas.data * parameters['ratio'] * frac[ibin] * \
                     (gas.cumass*1e3)/((gas.culength*1e2)
                                     ** 2.)  # dimensions: nbin, nrad, nsec
 
@@ -1648,8 +1482,8 @@ def main():
         # We then need to recompute absorption mass opacities from dustkappa* files
         abs_opacity = np.zeros(nbin)
         lbda1 = wavelength * 1e3  # wavelength in microns
-        if precalc_opac == 'Yes':
-            opacdir = os.path.expanduser(opacity_dir)
+        if parameters['precalc_opac'] == 'Yes':
+            opacdir = os.path.expanduser(parameters['opacity_dir'])
             # Case where we use pre-calculated dustkappa* files located in opacity_dir files
             # whatever the composition, precomputed opacities are for dust sizes between 1 microns and 10 cm, with 50 bins
             sizemin_file = 1e-6          # in meters, do not edit!
@@ -1660,7 +1494,7 @@ def main():
 
         # Loop over size bins
         for k in range(nbin):
-            if precalc_opac == 'No':
+            if parameters['precalc_opac'] == 'No':
                 # Case where we use dustkappa* files in current directory
                 file = 'dustkappa_'+species+str(k)+'.inp'
                 (lbda, kappa_abs, kappa_sca, g) = read_opacities(file)
@@ -1741,7 +1575,7 @@ def main():
         print('max(optical depth) = ', optical_depth.max())
 
         # Get dust temperature
-        if Tdust_eq_Thydro == 'No':
+        if parameters['Tdust_eq_Thydro'] == 'No':
             Temp = np.fromfile('dust_temperature.bdat', dtype='float64')
             Temp = Temp[4:]
             Temp = Temp.reshape(nbin, nsec, ncol, nrad)
@@ -1756,7 +1590,7 @@ def main():
         else:
             Tdust = np.zeros(gas.data.shape)
             Tdust = np.swapaxes(Tdust, 0, 1)   # means nsec, nrad
-            T_model = aspectratio*aspectratio*gas.cutemp * \
+            T_model = parameters['aspectratio']*parameters['aspectratio']*gas.cutemp * \
                 gas.rmed**(-1.0+2.0*flaringindex)  # in Kelvin
             for j in range(nsec):
                 Tdust[j, :] = T_model
@@ -1850,7 +1684,7 @@ def main():
                 Inu_cart2[:, i] = Inu_cart[:, nbpixels-1]
 
         # recast things when no xaxisflip! (flip in both x and y, checked!)
-        if xaxisflip == 'No':
+        if parameters['xaxisflip'] == 'No':
             Inu_cart2_orig = Inu_cart2
             Inu_cart2 = np.flipud(np.fliplr(Inu_cart2_orig))
 
@@ -1894,7 +1728,7 @@ def main():
         print("Total flux of 2D method [Jy] = "+str(np.sum(Inu)))
 
         # Add white (Gaussian) noise to raw flux image to simulate effects of 'thermal' noise
-        if add_noise == 'Yes':
+        if parameters['add_noise'] == 'Yes':
             # beam area in pixel^2
             beam = (np.pi/(4.*np.log(2.)))*bmaj*bmin/(dxy**2.)
             # noise standard deviation in Jy per pixel (I've checked the expression below works well)
@@ -1915,7 +1749,7 @@ def main():
 
         # check beam is correctly handled by inserting a source point at the
         # origin of the raw intensity image
-        if check_beam == 'Yes':
+        if parameters['check_beam'] == 'Yes':
             Inu[nbpixels//2-1, nbpixels//2-1] = 500.0*Inu.max()
 
         # Call to Gauss_filter function
@@ -1963,7 +1797,7 @@ def main():
         #    hdu.header[var[i]] = par[i]
         hdu.data = convolved_Inu
         inbasename = os.path.basename('./'+outfile)
-        if add_noise == 'Yes':
+        if parameters['add_noise'] == 'Yes':
             substr = '_wn'+str(noise_dev_std)+'_JyBeam2D.fits'
             jybeamfileout = re.sub('.fits', substr, inbasename)
         else:
@@ -1997,8 +1831,8 @@ def main():
         d1 = -d0
         # d1 = xgrid[nbpixels-1]*gas.culength/1.5e11/distance*np.abs(np.cos(inclination_in_rad))    # >0
         # da positive definite
-        if (minmaxaxis < abs(a0)):
-            da = minmaxaxis
+        if (parameters['minmaxaxis'] < abs(a0)):
+            da = parameters['minmaxaxis']
         else:
             da = maximum(abs(a0), abs(a1))
 
@@ -2027,9 +1861,9 @@ def main():
         # Add wavelength in top-left corner
         strlambda = '$\lambda$=' + \
             str(round(wavelength, 2))+'mm'  # round to 2 decimals
-        if wavelength < 0.01:
+        if parameters['wavelength'] < 0.01:
             strlambda = '$\lambda$='+str(round(wavelength*1e3, 2))+'$\mu$m'
-        if RTdust_or_gas == 'dust':
+        if parameters['RTdust_or_gas'] == 'dust':
             ax.text(xlambda, dmax-0.166*da, strlambda,
                     fontsize=20, color='white', weight='bold')
 
@@ -2063,7 +1897,7 @@ def main():
         # =====================
         # Compute deprojection and polar expansion (SP)
         # =====================
-        if deproj_polar == 'Yes':
+        if parameters['deproj_polar'] == 'Yes':
             currentdir = os.getcwd()
             alpha_min = 0.          # deg, PA of offset from the star
             Delta_min = 0.          # arcsec, amplitude of offset from the star
@@ -2097,7 +1931,7 @@ def main():
 
             # azimuthal shift such that PA=0 corresponds to y-axis pointing upwards, and
             # increases counter-clockwise from that axis
-            if xaxisflip == 'Yes':
+            if parameters['xaxisflip'] == 'Yes':
                 jshift = int(nbpixels/4)
             else:
                 jshift = int(nbpixels/4)
@@ -2114,8 +1948,8 @@ def main():
 
             # Set x- and y-ranges
             ax.set_xlim(-180, 180)          # PA relative to Clump 1's
-            if (minmaxaxis < maximum(abs(a0), abs(a1))):
-                ymax = minmaxaxis
+            if (parameters['minmaxaxis'] < maximum(abs(a0), abs(a1))):
+                ymax = parameters['minmaxaxis']
             else:
                 ymax = maximum(abs(a0), abs(a1))
             ax.set_ylim(0, ymax)      # Deprojected radius in arcsec
@@ -2137,9 +1971,9 @@ def main():
             # Add wavelength in bottom-left corner
             strlambda = '$\lambda$=' + \
                 str(round(wavelength, 2))+'mm'  # round to 2 decimals
-            if wavelength < 0.01:
+            if parameters['wavelength'] < 0.01:
                 strlambda = '$\lambda$='+str(round(wavelength*1e3, 2))+'$\mu$m'
-            if RTdust_or_gas == 'dust':
+            if parameters['RTdust_or_gas'] == 'dust':
                 ax.text(60, 0.02, strlambda, fontsize=16,
                         color='white', weight='bold')
 
@@ -2160,7 +1994,6 @@ def main():
 
             os.system('rm -rf deproj_polar_dir')
             os.chdir(currentdir)
-
 
     print('--------- done! ----------')
 

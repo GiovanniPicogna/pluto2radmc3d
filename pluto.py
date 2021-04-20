@@ -1,3 +1,4 @@
+import numpy as np
 try:
     import h5py as h5
     hasH5 = True
@@ -6,17 +7,16 @@ except ImportError:
 
 class pload(object):
     # based on A. Mignone routine
-    def __init__(self, ns, nsec=600, w_dir=None, datatype=None, level=0, x1range=None, x2range=None, x3range=None):
+    def __init__(self, parameters, datatype=None, level=0, x1range=None, x2range=None, x3range=None):
         """Loads the data.
         **Inputs**:
-          ns -- Step Number of the data file w_dir -- path to the directory which has the data files\n
           datatype -- Datatype (default = 'double')
 
         **Outputs**:
           pyPLUTO pload object whose keys are arrays of data values.
         """
 
-        self.NStep = ns
+        self.NStep = parameters['on']
         self.Dt = 1.e-4
 
         self.n1 = 0
@@ -43,12 +43,9 @@ class pload(object):
         self.datatype = datatype
 
         self.level = level
+        self.wdir = parameters['directory']
 
-        if w_dir is None:
-            w_dir = os.getcwd() + '/'
-        self.wdir = w_dir
-
-        Data_dictionary = self.ReadDataFile(self.NStepStr)
+        Data_dictionary = self.ReadDataFile(self.NStepStr,parameters)
         for keys in Data_dictionary:
             object.__setattr__(self, keys, Data_dictionary.get(keys))
 
@@ -66,7 +63,7 @@ class pload(object):
     def keys(self, f):
         return [key for key in f.keys()]
 
-    def ReadVarFile(self, varfile):
+    def ReadVarFile(self, varfile, parameters):
         """ Read variable names from the outfiles.
         **Inputs**:
           varfile -- name of the out file which has variable information. 
@@ -190,7 +187,7 @@ class pload(object):
         returnData = (fp["Timestep_"+str(step)+"/vars"][var][:])
         return returnData
 
-    def DataScanHDF5(self, fp, myvars):
+    def DataScanHDF5(self, fp, myvars, parameters):
         """ Scans HDF5 data files in PLUTO. 
 
         **Inputs**:
@@ -242,16 +239,15 @@ class pload(object):
         vars = np.zeros((nx, ny, nz, nvar))
 
         h5vardict = {}
-        num = int(gas_file)
         for iv in range(nvar):
-            h5vardict[myvars[iv]] = self.getVar(fp, num, myvars[iv])
+            h5vardict[myvars[iv]] = self.getVar(fp, parameters['on'], myvars[iv])
             #h5vardict[myvars[iv]] = vars[:,:,:,iv].squeeze()
 
         OutDict = dict(NewGridDict)
         OutDict.update(h5vardict)
         return OutDict
 
-    def ReadSingleFile(self, datafilename, myvars, n1, n2, n3, endian, dtype, ddict):
+    def ReadSingleFile(self, datafilename, myvars, parameters, n1, n2, n3, endian, dtype, ddict):
         """Reads a single data file, data.****.dtype.
 
         **Inputs**: 
@@ -275,12 +271,12 @@ class pload(object):
 
         print("Reading Data file : %s" % datafilename)
 
-        h5d = self.DataScanHDF5(fp, myvars)
+        h5d = self.DataScanHDF5(fp, myvars, parameters)
         ddict.update(h5d)
 
         fp.close()
 
-    def ReadDataFile(self, num):
+    def ReadDataFile(self, num, parameters):
         """Reads the data file generated from PLUTO code.
 
         **Inputs**:
@@ -299,7 +295,7 @@ class pload(object):
         nstr = num
         varfile = self.wdir+"data."+nstr+dataext
 
-        self.ReadVarFile(varfile)
+        self.ReadVarFile(varfile, parameters)
         self.ReadGridFile(gridfile)
         self.ReadTimeInfo(varfile)
         nstr = num
@@ -317,7 +313,7 @@ class pload(object):
         ddict = dict(D)
 
         datafilename = self.wdir+"data."+nstr+dataext
-        self.ReadSingleFile(datafilename, self.vars, self.n1, self.n2,
+        self.ReadSingleFile(datafilename, self.vars, parameters, self.n1, self.n2,
                             self.n3, endian, dtype, ddict)
 
         return ddict

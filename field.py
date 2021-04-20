@@ -1,4 +1,8 @@
-import pluto
+import sys
+import numpy as np
+import subprocess
+from pluto import *
+
 # -------------------------------------------------------------------
 # building mesh arrays for phi, theta, r (x, y, z)
 # -------------------------------------------------------------------
@@ -10,9 +14,6 @@ class Mesh():
     """
 
     def __init__(self, directory=""):
-        if len(directory) > 1:
-            if directory[-1] != '/':
-                directory += '/'
 
         # -----
         # grid
@@ -101,11 +102,8 @@ class Field(Mesh):
     """
 
     def __init__(self, field, parameters, staggered='c', directory='', dtype='float64'):
-        if len(directory) > 1:
-            if directory[-1] != '/':
-                directory += '/'
-        ns = int(parameters['on'])
-        D = pluto.pload(ns=ns, w_dir=directory)
+
+        D = pload(parameters=parameters)
 
         nrad = np.shape(D.rho)[2]
         ncol = np.shape(D.rho)[1]
@@ -119,7 +117,7 @@ class Field(Mesh):
         # colatitude (ncol is a global variable)
         self.ncol = ncol
 
-        Mesh.__init__(self, directory)    # all Mesh attributes inside Field
+        Mesh.__init__(self, directory=parameters['directory'])    # all Mesh attributes inside Field
 
         # get units via definitions.h file
         command = 'awk " /^#define  UNIT_LENGTH/ " '+directory+'definitions.h'
@@ -143,7 +141,7 @@ class Field(Mesh):
         # unit of temperature = mean molecular weight * 8.0841643e-15 * M / L;
         self.cutemp = 2.35 * 8.0841643e-15 * self.cumass / self.culength
 
-        if override_units == 'Yes':
+        if parameters['override_units'] == 'Yes':
             self.cumass = new_unit_mass
             self.culength = new_unit_length
             # Deduce new units of time and temperature:
