@@ -101,7 +101,7 @@ class Field(Mesh):
                                              depends if FARGO_OPT+=-DFLOAT is activated
     """
 
-    def __init__(self, field, parameters, staggered='c', directory='', dtype='float64'):
+    def __init__(self, field, parameters, staggered='c', dtype='float64'):
 
         D = pload(parameters=parameters)
 
@@ -117,10 +117,10 @@ class Field(Mesh):
         # colatitude (ncol is a global variable)
         self.ncol = ncol
 
-        Mesh.__init__(self, directory=parameters['directory'])    # all Mesh attributes inside Field
+        Mesh.__init__(self, directory=parameters['dir'])    # all Mesh attributes inside Field
 
         # get units via definitions.h file
-        command = 'awk " /^#define  UNIT_LENGTH/ " '+directory+'definitions.h'
+        command = 'awk " /^#define  UNIT_LENGTH/ " '+parameters['dir']+'definitions.h'
         # check which version of python we're using
         if sys.version_info[0] < 3:   # python 2.X
             buf = subprocess.check_output(command, shell=True)
@@ -129,7 +129,7 @@ class Field(Mesh):
         num = buf.split()[2]
         ulen = num.split('*')[0][1:]
         self.culength = float(ulen)*1.5e11  # from au to meters
-        command = 'awk " /^#define  UNIT_DENSITY/ " '+directory+'definitions.h'
+        command = 'awk " /^#define  UNIT_DENSITY/ " '+parameters['dir']+'definitions.h'
         # check which version of python we're using
         if sys.version_info[0] < 3:   # python 2.X
             buf = subprocess.check_output(command, shell=True)

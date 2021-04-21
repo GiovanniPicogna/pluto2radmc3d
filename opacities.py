@@ -1,3 +1,6 @@
+import matplotlib.pyplot as plt
+import numpy as np
+import fargo2radmc3d
 # -------------------------------------------------------------------
 # writing dustopac
 # -------------------------------------------------------------------
@@ -75,12 +78,8 @@ def plot_opacities(species='mix_2species_porous', amin=0.1, amax=1000, nbin=10, 
     sizes = np.logspace(np.log10(amin), np.log10(amax), nbin)
 
     for k in range(nbin):
-        if polarized_scat == 'No':
-            filein = 'dustkappa_'+species+str(k)+'.inp'
-        else:
-            filein = 'dustkapscatmat_'+species+str(k)+'.inp'
+        filein = 'dustkappa_'+species+str(k)+'.inp'
         (lbda, kappa_abs, kappa_sca, g) = read_opacities(filein)
-        #(lbda, kappa_abs, kappa_sca, g) = np.loadtxt(filein, unpack=True, skiprows=2)
 
         i1 = np.argmin(np.abs(lbda-lbda1))
 

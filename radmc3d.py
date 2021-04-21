@@ -1,3 +1,7 @@
+import os
+import numpy as np
+from constants import *
+
 # ---------------------
 # define RT model class
 # ---------------------
@@ -11,7 +15,7 @@ class RTmodel():
         self.label = label
         # RT pars
         self.Lambda = Lambda
-        self.line = gasspecies
+        self.line = line
         self.npix = npix
         self.incl = incl
         self.posang = posang
@@ -37,8 +41,6 @@ def write_radmc3d_script(parameters):
             command = 'radmc3d image tracetau lambda '+str(parameters['wavelength']*1e3)+' npix '+str(
                 parameters['nbpixels'])+' incl '+str(parameters['inclination'])+' posang '+str(
                     parameters['posangle']+90.0)+' phi '+str(parameters['phiangle'])
-        if parameters['polarized_scat'] == 'Yes':
-            command = command+' stokes'
 
     # RT in gas lines
     if parameters['RTdust_or_gas'] == 'gas':
@@ -238,23 +240,6 @@ def exportfits(M,parameters):
                             if np.abs(buf[k,l]) < 7.0*noise_dev_std:
                                 im[k,l] = float("NaN")#0.0
                     '''
-
-    if parameters['RTdust_or_gas'] == 'dust' and parameters['polarized_scat'] == 'Yes':
-        naxis = 3
-        images = np.zeros((5*im_ny*im_nx))
-        im = images.reshape(5, im_ny, im_nx)
-        for j in range(im_ny):
-            for i in range(im_nx):
-                line = f.readline()
-                dat = line.split()
-                im[0, j, i] = float(dat[0])  # I
-                im[1, j, i] = float(dat[1])  # Q
-                im[2, j, i] = float(dat[2])  # U
-                im[3, j, i] = float(dat[3])  # V
-                im[4, j, i] = math.sqrt(
-                    float(dat[1])**2.0+float(dat[2])**2.0)  # P
-                if (j == im_ny-1) and (i == im_nx-1):
-                    f.readline()     # empty line
 
     # close image file
     f.close()

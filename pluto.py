@@ -43,7 +43,7 @@ class pload(object):
         self.datatype = datatype
 
         self.level = level
-        self.wdir = parameters['directory']
+        self.wdir = parameters['dir']
 
         Data_dictionary = self.ReadDataFile(self.NStepStr,parameters)
         for keys in Data_dictionary:
