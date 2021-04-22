@@ -17,7 +17,7 @@ class Particles:
 
     def __init__(self, ns, directory=''):
 
-        def NStepStr():
+        def number_step_str():
             nsstr = str(ns)
             while len(nsstr) < 4:
                 nsstr = '0'+nsstr
@@ -27,7 +27,7 @@ class Particles:
             if directory[-1] != '/':
                 directory += '/'
 
-        nstepstr = NStepStr()
+        nstepstr = number_step_str()
         fname = directory+"part_data."+nstepstr+".dbl"
         fdata = open(fname, "rb")
         fmt1 = "<"+"i"
@@ -36,9 +36,9 @@ class Particles:
         nb1 = struct.calcsize(fmt1)
         nb2 = struct.calcsize(fmt2)
 
-        NOP = struct.unpack(fmt1, fdata.read(nb1))[0]
-        P_Step = struct.unpack(fmt1, fdata.read(nb1))[0]
-        P_Time = struct.unpack(fmt2, fdata.read(nb2))[0]
+        nop = struct.unpack(fmt1, fdata.read(nb1))[0]
+        particles_step = struct.unpack(fmt1, fdata.read(nb1))[0]
+        particles_time = struct.unpack(fmt2, fdata.read(nb2))[0]
 
         dtype = np.dtype([
             ("pid", np.int32),
@@ -54,34 +54,36 @@ class Particles:
             ("tstop", np.float64)
         ])
 
-        P_DataDict = np.fromfile(fdata, dtype=dtype)
+        particle_dictionary = np.fromfile(fdata, dtype=dtype)
         fdata.close()
 
-        sorter = P_DataDict['pid'].argsort()
-        DataDict = P_DataDict[sorter]
+        sorter = particle_dictionary['pid'].argsort()
+        data_dictionary = particle_dictionary[sorter]
 
         particles_radius = np.array(
             [0.0001, 0.001, 0.01, 0.1, 0.3, 1., 3., 10., 100., 1000.])
 
-        self.NOP = NOP
-        self.P_Time = P_Time
-        self.P_Step = P_Step
-        self.pid = DataDict['pid']
-        self.pcell_x = DataDict['pcell_x']
-        self.pcell_y = DataDict['pcell_y']
-        self.pcell_z = DataDict['pcell_z']
-        self.pos_x = DataDict['pos_x']
-        self.pos_y = DataDict['pos_y']
-        self.pos_z = DataDict['pos_z']
-        self.vel_x = DataDict['vel_x']
-        self.vel_y = DataDict['vel_y']
-        self.vel_z = DataDict['vel_z']
-        self.tstop = DataDict['tstop']
+        self.nop = nop
+        self.particles_time = particles_time
+        self.particles_step = particles_step
+        self.pid = data_dictionary['pid']
+        self.pcell_x = data_dictionary['pcell_x']
+        self.pcell_y = data_dictionary['pcell_y']
+        self.pcell_z = data_dictionary['pcell_z']
+        self.pos_x = data_dictionary['pos_x']
+        self.pos_y = data_dictionary['pos_y']
+        self.pos_z = data_dictionary['pos_z']
+        self.vel_x = data_dictionary['vel_x']
+        self.vel_y = data_dictionary['vel_y']
+        self.vel_z = data_dictionary['vel_z']
+        self.tstop = data_dictionary['tstop']
         self.radius = [particles_radius[i] for j in range(100000) for i in range(10)]
 
-def populate_dust_bins(density, particle_data, nbin, bins, particles_per_bin_per_cell, particles_per_bin, tstop_per_bin):
 
-    for m in range(particle_data.NOP):
+def populate_dust_bins(density, particle_data, nbin, bins, dust_cube, particles_per_bin, tstop_per_bin):
+
+    particles_per_bin_per_cell = np.zeros((density.nsec * density.ncol * density.nrad * nbin))
+    for m in range(particle_data.nop):
 
         # radial index of the cell where the particle is
         i = int(np.log(particle_data.pos_x[m] / density.redge.min()) / np.log(
@@ -106,9 +108,9 @@ def populate_dust_bins(density, particle_data, nbin, bins, particles_per_bin_per
 
         # find out which bin particle belongs to
         ibin = 0
-        for bin in range(nbin):
-            if particle_data.radius[m] < bins[bin + 1]:
-                ibin = bin
+        for n in range(nbin):
+            if particle_data.radius[m] < bins[n + 1]:
+                ibin = n
                 break
 
         # skip particles that are bigger than the selected bin sizes
@@ -126,3 +128,8 @@ def populate_dust_bins(density, particle_data, nbin, bins, particles_per_bin_per
         tstop_per_bin[ibin] /= particles_per_bin[ibin]
         print(str(particles_per_bin[ibin]) + ' grains between ' +
               str(bins[ibin]) + ' and ' + str(bins[ibin + 1]) + ' meters')
+
+    dust_cube = particles_per_bin_per_cell.reshape((nbin, density.nsec, density.ncol, density.nrad))
+
+    # free RAM memory
+    del particles_per_bin_per_cell

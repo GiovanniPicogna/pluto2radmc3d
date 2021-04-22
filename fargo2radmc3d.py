@@ -48,6 +48,8 @@ def main():
     nsec = density.nsec
 
     # volume of each grid cell (code units)
+    calculate_volume(density)
+
     volume = np.zeros((nsec, ncol, nrad))
     for i in range(nsec):
         for j in range(ncol):
@@ -61,7 +63,7 @@ def main():
     # Allocate arrays
     nbin = parameters['nbin']
     bins = np.asarray([0.00002, 0.0002, 0.002, 0.02, 0.2, 0.4, 2., 4, 20, 200, 2000])
-    particles_per_bin_per_cell = np.zeros((nsec*ncol*nrad*nbin))
+    dust_cube = np.zeros((nbin,nsec,ncol,nrad))
     particles_per_bin = np.zeros(nbin)
     tstop_per_bin = np.zeros(nbin)
 
@@ -72,9 +74,7 @@ def main():
         print('--------- computing dust mass volume density ----------')
 
         particle_data = Particles(ns=parameters['particle_file'], directory=parameters['dir'])
-        populate_dust_bins(density, particle_data, nbin, bins, particles_per_bin_per_cell, particles_per_bin, tstop_per_bin)
-
-        dust_cube = particles_per_bin_per_cell.reshape(nbin, nsec, ncol, nrad)
+        populate_dust_bins(density, particle_data, nbin, bins, dust_cube, particles_per_bin, tstop_per_bin)
 
         frac = np.zeros(nbin)
         buf = 0.0
@@ -198,7 +198,7 @@ def main():
         DUSTOUT.close()
 
         # free RAM memory
-        del rho_dust_cube, dust_cube, particles_per_bin_per_cell
+        del rho_dust_cube, dust_cube
     elif parameters['RTdust_or_gas'] == 'gas':
         print("Set of initial conditions not implemented for pluto yet. Only parameters['RTdust_or_gas'] == 'dust'")
         sys.exit('I must exit!')
