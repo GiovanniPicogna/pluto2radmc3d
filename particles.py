@@ -1,6 +1,7 @@
 import struct
 import numpy as np
 import sys
+import time
 
 
 # -------------------------------------------------------------------
@@ -80,47 +81,40 @@ class Particles:
         self.radius = [particles_radius[i] for j in range(100000) for i in range(10)]
 
 
-def populate_dust_bins(density, particle_data, nbin, bins, dust_cube, particles_per_bin, tstop_per_bin):
+def populate_dust_bins(density, particle_data, nbin, bins, particles_per_bin_per_cell, particles_per_bin,
+                       tstop_per_bin):
 
-    particles_per_bin_per_cell = np.zeros((density.nsec * density.ncol * density.nrad * nbin))
-    for m in range(particle_data.nop):
+    for index_part in range(particle_data.nop):
+
+        # skip particles that are bigger than the selected bin sizes
+        if particle_data.radius[index_part] >= bins[nbin]:
+            continue
 
         # radial index of the cell where the particle is
-        i = int(np.log(particle_data.pos_x[m] / density.redge.min()) / np.log(
-            density.redge.max() / density.redge.min()) * density.nrad)
-        if i < 0 or i >= (density.nrad + 2):
-            print('In recalc_density step: radial index = ', i)
+        index_radial = np.where(density.redge > particle_data.pos_x[index_part])[0][0] - 1
+        if index_radial < 0 or index_radial >= (density.nrad + 2):
+            print('In recalc_density step: radial index = ', index_radial)
             sys.exit()
 
         # polar index of the cell where the particles is
-        j = density.ncol - 1 - int(np.log((np.pi - particle_data.pos_y[m]) / (np.pi - density.tedge.max())) / np.log(
-            (np.pi - density.tedge.min()) / (np.pi - density.tedge.max())) * density.ncol)
-        if j < 0 or j >= (density.ncol + 2):
-            print('In recalc_density step: polar index = ', j)
-            sys.exit()
-
-        # azimuthal index of the cell where the particle is
-        # (general expression since grid spacing in azimuth is always arithmetic)
-        k = particle_data.pcell_z[m]
-        if k < 0 or k >= (density.nsec + 2):
-            print('In recalc_density step: azimuthal index = ', k)
+        index_polar = np.where(density.tedge > particle_data.pos_y[index_part])[0][0] - 1
+        if index_polar < 0 or index_polar >= (density.ncol + 2):
+            print('In recalc_density step: polar index = ', index_polar)
             sys.exit()
 
         # find out which bin particle belongs to
-        ibin = 0
-        for n in range(nbin):
-            if particle_data.radius[m] < bins[n + 1]:
-                ibin = n
-                break
+        index_bin = np.where(bins > particle_data.radius[index_part])[0][0] - 1
 
-        # skip particles that are bigger than the selected bin sizes
-        if particle_data.radius[m] >= bins[nbin + 1]:
-            continue
+        particles_per_bin[index_bin] += 1
+        tstop_per_bin[index_bin] += particle_data.tstop[index_part]
 
-        k = ibin * density.nsec * density.ncol * density.nrad + k * density.ncol * density.nrad + j * density.nrad + i
-        particles_per_bin_per_cell[k] += 1
-        particles_per_bin[ibin] += 1
-        tstop_per_bin[ibin] += particle_data.tstop[m]
+        # azimuthal index of the cell where the particle is
+        for index_azimuthal in range(density.nsec):
+
+            index = index_bin * density.nsec * density.ncol * density.nrad + index_azimuthal * density.ncol * \
+                    density.nrad + index_polar * density.nrad + index_radial
+
+            particles_per_bin_per_cell[index] += 1
 
     for ibin in range(nbin):
         if particles_per_bin[ibin] == 0:
@@ -128,8 +122,3 @@ def populate_dust_bins(density, particle_data, nbin, bins, dust_cube, particles_
         tstop_per_bin[ibin] /= particles_per_bin[ibin]
         print(str(particles_per_bin[ibin]) + ' grains between ' +
               str(bins[ibin]) + ' and ' + str(bins[ibin + 1]) + ' meters')
-
-    dust_cube = particles_per_bin_per_cell.reshape((nbin, density.nsec, density.ncol, density.nrad))
-
-    # free RAM memory
-    del particles_per_bin_per_cell

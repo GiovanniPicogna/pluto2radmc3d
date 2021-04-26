@@ -115,7 +115,7 @@ def read_parameters_file(parameters):
     parameters['noise_dev_std'] = float(read_parameter('noise_dev_std', default))
 
     # deproj_polar
-    default = "Yes"
+    default = "No"
     parameters['deproj_polar'] = str(read_parameter('deproj_polar', default))
 
     # nsec
@@ -260,7 +260,7 @@ def read_parameters_file(parameters):
     parameters['secondorder'] = str(read_parameter('secondorder', default))
 
     # axi_intensity
-    default = "Yes"
+    default = "No"
     parameters['axi_intensity'] = str(read_parameter('axi_intensity', default))
 
     # truncation_radius
