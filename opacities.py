@@ -1,5 +1,5 @@
 import matplotlib.pyplot as plt
-from pluto2radmc3d import *
+import numpy as np
 
 
 # -------------------------------------------------------------------

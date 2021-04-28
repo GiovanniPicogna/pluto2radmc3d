@@ -1,7 +1,7 @@
 import subprocess
 import sys
 
-from pluto2radmc3d import *
+import numpy as np
 from pluto import pload
 
 
