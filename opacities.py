@@ -1,7 +1,5 @@
 import matplotlib.pyplot as plt
-import numpy as np
-
-import fargo2radmc3d
+from pluto2radmc3d import *
 
 
 # -------------------------------------------------------------------

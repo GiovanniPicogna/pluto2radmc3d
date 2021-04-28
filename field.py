@@ -1,9 +1,8 @@
 import subprocess
 import sys
 
-import numpy as np
-
-from pluto import *
+from pluto2radmc3d import *
+from pluto import pload
 
 
 # -------------------------------------------------------------------
@@ -171,8 +170,8 @@ class Field(Mesh):
         self.cutemp = 2.35 * 8.0841643e-15 * self.cumass / self.culength
 
         if parameters["override_units"] == "Yes":
-            self.cumass = new_unit_mass
-            self.culength = new_unit_length
+            self.cumass = parameters["new_unit_mass"]
+            self.culength = parameters["new_unit_length"]
             # Deduce new units of time and temperature:
             # T = sqrt( pow(L,3.) / 6.673e-11 / M )
             # U = mmw * 8.0841643e-15 * M / L;
